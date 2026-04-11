@@ -144,6 +144,36 @@ BRAND_PROFILES = {
         "identity": "la légende américaine",
         "angles": ["collector", "rareté", "histoire", "look unique"],
     },
+    "ferrari": {
+        "tone": "exotique",
+        "emoji": "🏎️",
+        "identity": "la quintessence de la supercar italienne",
+        "angles": ["exclusivité", "performance extrême", "héritage course", "design italien"],
+    },
+    "audi": {
+        "tone": "raffiné",
+        "emoji": "🇩🇪",
+        "identity": "la technologie allemande de pointe",
+        "angles": ["Quattro AWD", "technologie", "qualité de construction", "performance"],
+    },
+    "buick": {
+        "tone": "confort",
+        "emoji": "✨",
+        "identity": "le confort américain premium",
+        "angles": ["confort", "silence de roulement", "technologie", "valeur"],
+    },
+    "cadillac": {
+        "tone": "luxe",
+        "emoji": "⭐",
+        "identity": "le luxe américain audacieux",
+        "angles": ["luxe", "technologie", "performance", "prestige"],
+    },
+    "mitsubishi": {
+        "tone": "aventure",
+        "emoji": "🏔️",
+        "identity": "le 4x4 japonais fiable",
+        "angles": ["AWD", "fiabilité", "garantie", "rapport qualité-prix"],
+    },
 }
 
 # ─── Base de connaissance : Modèles spécifiques ───
@@ -223,6 +253,10 @@ MODEL_SPECS = {
         "trims": {
             "tradesman": {"vibe": "le truck de travail, simple et efficace"},
             "big horn": {"vibe": "le meilleur rapport équipement-prix"},
+            "classic slt": {"vibe": "le Classic — équipement solide à prix compétitif"},
+            "classic tradesman": {"vibe": "le Classic pour le travail au quotidien"},
+            "slt": {"vibe": "bien équipé — le choix populaire"},
+            "sport": {"hp": "395", "engine": "V8 HEMI 5.7L", "vibe": "le HEMI avec le look sport — roues noires et grille sport"},
             "laramie": {"vibe": "cuir et chrome — le truck premium"},
             "rebel": {"vibe": "le look off-road avec la suspension Bilstein"},
             "limited": {"vibe": "le truck limousine — tout le luxe"},
@@ -234,6 +268,7 @@ MODEL_SPECS = {
         "known_for": "le heavy-duty qui remorque tout",
         "trims": {
             "tradesman": {"vibe": "fait pour travailler, point"},
+            "slt": {"vibe": "heavy-duty bien équipé au bon prix"},
             "big horn": {"vibe": "heavy-duty bien équipé"},
             "laramie": {"vibe": "HD avec intérieur premium"},
             "limited": {"vibe": "le HD le plus luxueux sur le marché"},
@@ -246,6 +281,14 @@ MODEL_SPECS = {
         "trims": {
             "cargo van": {"vibe": "l'espace de travail mobile"},
             "tradesman": {"vibe": "prêt pour le business dès la sortie du lot"},
+            "1500": {"vibe": "le ProMaster compact — maniable en ville"},
+            "2500": {"vibe": "le ProMaster mid — bon équilibre charge/maniabilité"},
+            "3500": {"vibe": "le ProMaster max — charge maximale pour les pros"},
+            "1500 136": {"vibe": "empattement court — parfait pour les livraisons urbaines"},
+            "1500 118": {"vibe": "le plus compact — facile à stationner"},
+            "2500 high": {"vibe": "toit haut — debout à l'intérieur pour travailler"},
+            "3500 high": {"vibe": "toit haut + charge max — le fourgon ultime"},
+            "3500 high extended": {"vibe": "toit haut + empattement long — le plus d'espace possible"},
         },
     },
     # FORD
@@ -287,6 +330,27 @@ MODEL_SPECS = {
             "gs-l": {"vibe": "le luxe Mazda accessible"},
             "gt": {"vibe": "cuir Nappa et bois véritable"},
             "phev": {"vibe": "hybride rechargeable premium"},
+            "premium": {"vibe": "le haut de gamme Mazda — cuir, bois, technologie"},
+            "premium plus": {"vibe": "le summum du luxe Mazda avec tout l'équipement"},
+            "premium signature": {"vibe": "édition signature — le meilleur de Mazda, point final"},
+        },
+    },
+    "cx-5": {
+        "type": "suv_compact",
+        "known_for": "le SUV compact le plus plaisant à conduire",
+        "trims": {
+            "gs": {"vibe": "bien équipé et agréable"},
+            "gt": {"vibe": "cuir et toit ouvrant — le sweet spot"},
+            "signature": {"vibe": "le CX-5 ultime — turbo et luxe"},
+        },
+    },
+    "cx-50": {
+        "type": "suv_compact",
+        "known_for": "le SUV compact aventurier de Mazda",
+        "trims": {
+            "gs": {"vibe": "prêt pour l'aventure de série"},
+            "gt": {"vibe": "confort et capacité off-road"},
+            "meridian": {"vibe": "édition premium — turbo et cuir"},
         },
     },
     # PLYMOUTH
@@ -294,6 +358,293 @@ MODEL_SPECS = {
         "type": "collector",
         "known_for": "le hot rod de usine — une pièce de collection rare",
         "trims": {},
+    },
+    "satellite": {
+        "type": "collector",
+        "known_for": "le muscle car classique Plymouth des années 60-70",
+        "trims": {},
+    },
+    # JEEP (modèles manquants)
+    "wagoneer": {
+        "type": "suv_premium",
+        "known_for": "le grand SUV de luxe américain par Jeep",
+        "trims": {
+            "series i": {"vibe": "l'entrée dans le monde Wagoneer — déjà très équipé"},
+            "series ii": {"vibe": "le luxe Wagoneer avec plus de technologie et de confort"},
+            "series iii": {"vibe": "le Wagoneer tout inclus — rien ne manque"},
+        },
+    },
+    "renegade": {
+        "type": "suv_compact",
+        "known_for": "le petit Jeep au look unique — compact mais capable",
+        "trims": {
+            "sport": {"vibe": "compact et abordable avec le badge Jeep"},
+            "north": {"vibe": "bien équipé pour le climat canadien"},
+            "limited": {"vibe": "le petit luxe Jeep"},
+            "trailhawk": {"vibe": "le plus capable des petits SUV — Trail Rated"},
+        },
+    },
+    # CHEVROLET
+    "malibu": {
+        "type": "berline",
+        "known_for": "la berline intermédiaire fiable et économique",
+        "trims": {
+            "ls": {"vibe": "l'essentiel bien fait"},
+            "lt": {"hp": "160", "engine": "Turbo 1.5L", "vibe": "le meilleur rapport équipement-prix"},
+            "rs": {"vibe": "le look sportif avec le turbo"},
+            "premier": {"vibe": "tout équipé — cuir et technologie"},
+        },
+    },
+    "silverado": {
+        "type": "pickup",
+        "known_for": "le pickup pleine grandeur le plus vendu en Amérique",
+        "trims": {
+            "wt": {"vibe": "le truck de travail, simple et efficace"},
+            "custom": {"vibe": "le look custom sans le prix custom"},
+            "lt": {"vibe": "bien équipé pour le quotidien"},
+            "rst": {"vibe": "le look sport streetside"},
+            "ltz": {"vibe": "cuir et chrome — le Silverado premium"},
+            "high country": {"vibe": "le Silverado le plus luxueux — tout y est"},
+            "trail boss": {"vibe": "le off-road Chevy avec suspension relevée"},
+            "zr2": {"hp": "420", "engine": "V8 6.2L", "vibe": "le Silverado off-road extrême — Multimatic DSSV"},
+        },
+    },
+    "equinox": {
+        "type": "suv_compact",
+        "known_for": "le SUV compact familial par excellence chez Chevy",
+        "trims": {
+            "ls": {"vibe": "l'essentiel pour la famille"},
+            "lt": {"vibe": "bien équipé et polyvalent"},
+            "rs": {"vibe": "le look sportif"},
+            "premier": {"vibe": "tout équipé — cuir et technologie"},
+        },
+    },
+    # HONDA
+    "civic": {
+        "type": "berline",
+        "known_for": "la compacte la plus fiable et la plus vendue au monde",
+        "trims": {
+            "dx": {"vibe": "l'essentiel Honda — fiable et économique"},
+            "lx": {"vibe": "bien équipé de série"},
+            "ex": {"hp": "158", "engine": "2.0L i-VTEC", "vibe": "le sweet spot — toit ouvrant et Honda Sensing"},
+            "ex-l": {"vibe": "cuir et tout le confort"},
+            "touring": {"vibe": "la Civic tout équipée — navigation et cuir"},
+            "sport": {"vibe": "le look sportif avec le moteur turbo"},
+            "si": {"hp": "200", "engine": "Turbo 1.5L", "vibe": "la Civic sportive — turbo et manuelle"},
+            "type r": {"hp": "315", "engine": "Turbo 2.0L", "vibe": "la bête de piste — 315 chevaux de pure rage"},
+        },
+    },
+    "cr-v": {
+        "type": "suv_compact",
+        "known_for": "le SUV compact Honda — fiabilité légendaire",
+        "trims": {
+            "lx": {"vibe": "AWD et Honda Sensing de série"},
+            "ex": {"vibe": "le sweet spot avec toit ouvrant"},
+            "ex-l": {"vibe": "cuir et sièges chauffants"},
+            "touring": {"vibe": "tout équipé — le CR-V ultime"},
+        },
+    },
+    "accord": {
+        "type": "berline",
+        "known_for": "la berline intermédiaire référence — confort et fiabilité",
+        "trims": {
+            "lx": {"vibe": "bien équipé de série"},
+            "ex": {"vibe": "le meilleur rapport qualité-prix"},
+            "ex-l": {"vibe": "cuir et navigation"},
+            "sport": {"hp": "252", "engine": "Turbo 2.0L", "vibe": "le turbo qui surprend"},
+            "touring": {"hp": "252", "engine": "Turbo 2.0L", "vibe": "tout le luxe Honda — le sommet"},
+        },
+    },
+    # CHRYSLER
+    "pacifica": {
+        "type": "minivan",
+        "known_for": "la meilleure minifourgonnette sur le marché — confort familial",
+        "trims": {
+            "lx": {"vibe": "l'essentiel familial bien fait"},
+            "touring": {"vibe": "Stow 'n Go et confort pour toute la famille"},
+            "touring l": {"vibe": "cuir et portières électriques"},
+            "limited": {"vibe": "le luxe familial — tout y est"},
+            "pinnacle": {"vibe": "le summum du luxe en minifourgonnette"},
+            "hybrid": {"vibe": "hybride rechargeable — économique et familial"},
+        },
+    },
+    "300": {
+        "type": "berline",
+        "known_for": "la grande berline américaine au look imposant",
+        "trims": {
+            "touring": {"hp": "292", "engine": "V6 Pentastar 3.6L", "vibe": "le look imposant à bon prix"},
+            "s": {"hp": "300", "engine": "V6 Pentastar 3.6L", "vibe": "le look sport avec les roues noires"},
+            "c": {"hp": "363", "engine": "V8 HEMI 5.7L", "vibe": "le V8 HEMI dans une berline de luxe"},
+        },
+    },
+    # DODGE (modèles manquants)
+    "durango": {
+        "type": "suv_premium",
+        "known_for": "le seul SUV 3 rangées avec un V8 HEMI disponible",
+        "trims": {
+            "sxt": {"hp": "293", "engine": "V6 Pentastar 3.6L", "vibe": "le SUV Dodge accessible"},
+            "gt": {"hp": "293", "engine": "V6 Pentastar 3.6L", "vibe": "le look sport avec AWD"},
+            "r/t": {"hp": "360", "engine": "V8 HEMI 5.7L", "vibe": "le V8 HEMI dans un SUV familial"},
+            "citadel": {"hp": "360", "engine": "V8 HEMI 5.7L", "vibe": "le luxe Durango — cuir et chrome"},
+            "srt 392": {"hp": "475", "engine": "V8 HEMI 6.4L 392", "vibe": "475 chevaux dans un SUV 3 rangées"},
+            "srt hellcat": {"hp": "710", "engine": "V8 HEMI Supercharged 6.2L", "vibe": "le SUV le plus puissant jamais construit"},
+        },
+    },
+    # RAM (trims manquants)
+    "promaster city": {
+        "type": "commercial",
+        "known_for": "le fourgon compact idéal pour la ville",
+        "trims": {
+            "tradesman": {"vibe": "compact et maniable pour les livraisons"},
+            "wagon": {"vibe": "version passagers — 5 places"},
+        },
+    },
+    # TOYOTA (modèles supplémentaires)
+    "corolla": {
+        "type": "berline",
+        "known_for": "la voiture la plus vendue de l'histoire — fiabilité absolue",
+        "trims": {
+            "l": {"vibe": "l'essentiel Toyota"},
+            "le": {"vibe": "bien équipé et économique"},
+            "se": {"vibe": "le look sport avec la boîte CVT"},
+            "xse": {"vibe": "le sport haut de gamme"},
+        },
+    },
+    "tacoma": {
+        "type": "pickup",
+        "known_for": "le pickup mid-size indestructible",
+        "trims": {
+            "sr": {"vibe": "le truck de travail Toyota"},
+            "sr5": {"vibe": "le sweet spot — bien équipé"},
+            "trd sport": {"vibe": "le look sport sur route"},
+            "trd off-road": {"vibe": "Trail Rated — prêt pour le sentier"},
+            "trd pro": {"vibe": "le Tacoma ultime — TRD suspension et tout"},
+            "limited": {"vibe": "le luxe dans un pickup mid-size"},
+        },
+    },
+    "4runner": {
+        "type": "off_road",
+        "known_for": "le SUV body-on-frame — robuste et indestructible",
+        "trims": {
+            "sr5": {"vibe": "le 4Runner classique"},
+            "trd off-road": {"vibe": "différentiel arrière verrouillable — sérieux"},
+            "trd pro": {"vibe": "le 4Runner ultime pour le hors-route extrême"},
+            "limited": {"vibe": "luxe et capacité combinés"},
+        },
+    },
+    "highlander": {
+        "type": "suv_premium",
+        "known_for": "le SUV 3 rangées familial par excellence",
+        "trims": {
+            "le": {"vibe": "bien équipé de série"},
+            "xle": {"vibe": "le sweet spot familial"},
+            "limited": {"vibe": "cuir et technologie — tout y est"},
+            "platinum": {"vibe": "le sommet du luxe Toyota"},
+        },
+    },
+    # FORD (modèles supplémentaires)
+    "f-150": {
+        "type": "pickup",
+        "known_for": "le véhicule le plus vendu en Amérique — le roi des pickups",
+        "trims": {
+            "xl": {"vibe": "le truck de travail Ford"},
+            "xlt": {"hp": "400", "engine": "V6 EcoBoost 3.5L", "vibe": "le meilleur vendeur — bien équipé"},
+            "lariat": {"vibe": "cuir et chrome — le F-150 premium"},
+            "king ranch": {"vibe": "l'héritage texan — cuir et bois"},
+            "platinum": {"vibe": "le luxe absolu dans un pickup"},
+            "tremor": {"vibe": "le F-150 off-road avec suspension trail"},
+            "raptor": {"hp": "450", "engine": "V6 EcoBoost 3.5L HO", "vibe": "le pickup haute performance — Baja ready"},
+            "raptor r": {"hp": "720", "engine": "V8 Supercharged 5.2L", "vibe": "720 chevaux dans un pickup. Fou."},
+        },
+    },
+    "explorer": {
+        "type": "suv_premium",
+        "known_for": "le SUV 3 rangées Ford — aventure et famille",
+        "trims": {
+            "base": {"vibe": "l'Explorer bien équipé de série"},
+            "xlt": {"vibe": "le sweet spot familial"},
+            "limited": {"vibe": "cuir et technologie"},
+            "st": {"hp": "400", "engine": "V6 EcoBoost 3.0L", "vibe": "400 chevaux dans un SUV familial"},
+            "timberline": {"vibe": "l'Explorer prêt pour le sentier"},
+        },
+    },
+    "bronco": {
+        "type": "off_road",
+        "known_for": "le retour de la légende Ford — hors-route pur et dur",
+        "trims": {
+            "base": {"vibe": "le Bronco pur — portes et toit amovibles"},
+            "big bend": {"vibe": "un peu plus de confort pour la trail"},
+            "outer banks": {"vibe": "le look côtier avec tout l'équipement"},
+            "badlands": {"vibe": "le sérieux hors-route — stabilisateur déconnectable"},
+            "wildtrak": {"vibe": "les gros pneus et le Sasquatch package"},
+            "raptor": {"hp": "418", "engine": "V6 EcoBoost 3.0L", "vibe": "le Bronco extrême — suspension Baja"},
+        },
+    },
+    "escape": {
+        "type": "suv_compact",
+        "known_for": "le SUV compact Ford — polyvalent et économique",
+        "trims": {
+            "s": {"vibe": "l'essentiel Ford"},
+            "se": {"vibe": "bien équipé et AWD disponible"},
+            "sel": {"vibe": "confort et technologie"},
+            "titanium": {"vibe": "le haut de gamme compact Ford"},
+        },
+    },
+    # FERRARI
+    "488": {
+        "type": "exotique",
+        "known_for": "la supercar turbo qui a redéfini Ferrari",
+        "trims": {
+            "gtb": {"hp": "661", "engine": "V8 Biturbo 3.9L", "vibe": "661 chevaux de pure ingénierie italienne"},
+            "spider": {"hp": "661", "engine": "V8 Biturbo 3.9L", "vibe": "le même monstre, mais à ciel ouvert"},
+            "pista": {"hp": "710", "engine": "V8 Biturbo 3.9L", "vibe": "née sur la piste — la 488 ultime"},
+        },
+    },
+    "488gtb": {
+        "type": "exotique",
+        "known_for": "la supercar turbo qui a redéfini Ferrari",
+        "trims": {},
+    },
+    # HYUNDAI (modèles courants)
+    "tucson": {
+        "type": "suv_compact",
+        "known_for": "le SUV compact au design futuriste",
+        "trims": {
+            "essential": {"vibe": "bien équipé de série"},
+            "preferred": {"vibe": "AWD et sièges chauffants"},
+            "ultimate": {"vibe": "tout inclus — le luxe Hyundai"},
+        },
+    },
+    "santa fe": {
+        "type": "suv_premium",
+        "known_for": "le SUV familial redessiné avec audace",
+        "trims": {
+            "essential": {"vibe": "spacieux et bien équipé"},
+            "preferred": {"vibe": "le sweet spot familial"},
+            "ultimate": {"vibe": "cuir et panoramique — tout y est"},
+            "calligraphy": {"vibe": "le sommet du luxe Hyundai"},
+        },
+    },
+    # SUBARU
+    "outback": {
+        "type": "suv_compact",
+        "known_for": "le wagon surélevé avec AWD — aventure et quotidien",
+        "trims": {
+            "base": {"vibe": "AWD de série — prêt pour l'hiver"},
+            "limited": {"vibe": "cuir et EyeSight — le sweet spot"},
+            "onyx": {"vibe": "le look aventurier avec les accents noirs"},
+            "wilderness": {"vibe": "le vrai off-road Subaru — suspension relevée"},
+        },
+    },
+    "forester": {
+        "type": "suv_compact",
+        "known_for": "le SUV compact avec la meilleure visibilité de sa catégorie",
+        "trims": {
+            "base": {"vibe": "AWD et EyeSight de série"},
+            "touring": {"vibe": "cuir et toit panoramique"},
+            "sport": {"vibe": "le look sport avec le moteur turbo"},
+            "wilderness": {"vibe": "le Forester prêt pour le sentier"},
+        },
     },
 }
 

@@ -399,6 +399,7 @@ async def generate_text_for_vehicle(stock: str, event: str = "NEW"):
         vtype = ctx.get("vehicle_type", "general")
         tone_map = {
             "muscle_car": "adrenaline et son du moteur",
+            "muscle_sedan": "puissance et style 4 portes",
             "pickup": "robustesse et capacite",
             "pickup_hd": "robustesse et capacite",
             "off_road": "aventure et liberte",
@@ -407,6 +408,9 @@ async def generate_text_for_vehicle(stock: str, event: str = "NEW"):
             "suv_compact": "style et economie",
             "exotique": "exclusivite et reve",
             "collector": "exclusivite et reve",
+            "berline": "confort et fiabilite au quotidien",
+            "minivan": "espace familial et polyvalence",
+            "commercial": "efficacite et espace de travail",
         }
         tone = tone_map.get(vtype, "polyvalence et fiabilite")
 

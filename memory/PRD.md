@@ -90,9 +90,15 @@
 - Logs recents Supabase: derniers runs + events en temps reel
 - Endpoints: /api/cockpit/simulate, /api/cockpit/decode-vin/{stock}, /api/cockpit/recent-logs
 
+### Session 9 - Enrichissement Base de Connaissance Vehicule
+- 27 marques (ajout: Ferrari, Audi, Buick, Cadillac, Mitsubishi)
+- 43 modeles (ajout: Wagoneer, Renegade, Malibu, Civic, CR-V, Accord, Pacifica, 300, Durango, Satellite, 488GTB, Tucson, Santa Fe, Outback, Forester, Silverado, Equinox, F-150, Explorer, Bronco, Escape, Corolla, Tacoma, 4Runner, Highlander, CX-5, CX-50, ProMaster City)
+- 194 trims (ajout: Classic SLT, Sport, SLT pour Ram 1500/2500, ProMaster variantes, Durango R/T/SRT, Civic Si/Type R, etc.)
+- Nouveaux types: berline, minivan, commercial
+- 100% couverture de l'inventaire actif
+
 ## Backlog
-- P0: Push sur GitHub via "Save to Github" pour deployer llm_v3 sur Render
-- P1: Enrichir la base de connaissance (plus de modeles)
+- P0: Push sur GitHub via "Save to Github" pour deployer sur Render
 - P1: Implementer les 9 variables Render orphelines dans le code (ou les retirer)
 - P2: Multi-dealer (Luxura)
 - P2: A/B testing des styles d'intro
