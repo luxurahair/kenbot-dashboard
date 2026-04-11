@@ -1,48 +1,63 @@
-# PRD — kenbot-runner Bug Fix: PHOTOS_ADDED Detection
+# PRD — Kenbot Dashboard & PHOTOS_ADDED Fix
 
 ## Date: 2026-04-10
 
 ## Projet
-**kenbot-runner** — Bot automatisé pour le concessionnaire Kennebec Dodge (Daniel Giroux)
+**kenbot** — Bot d'inventaire automobile automatisé pour Kennebec Dodge (Daniel Giroux, Saint-Georges, Beauce)
 - Scrape l'inventaire de véhicules usagés sur kennebecdodge.ca
-- Génère des textes publicitaires (AI + sticker PDF)
+- Génère des textes publicitaires AI (OpenAI + Sticker PDF Stellantis)
 - Publie/met à jour sur Facebook automatiquement
-- Gère les transitions NO_PHOTO → WITH_PHOTO (PHOTOS_ADDED)
+- Gère le cycle de vie: NEW / SOLD / RESTORE / PRICE_CHANGED / PHOTOS_ADDED
+- Feed Meta CSV pour publicités
 
 ## Architecture
-- **Repo GitHub:** luxurahair/kenbot-runner
-- **Hébergement:** Render (cron toutes les 60 min)
-- **Base de données:** Supabase (tables: inventory, posts, events, sticker_pdfs)
-- **APIs:** Facebook Graph API, Kennebec Dodge website, OpenAI (textes AI), Chrysler (stickers PDF)
-- **Stack:** Python 3.11, requests, BeautifulSoup, Supabase client
+- **Repos GitHub:** luxurahair/kenbot-runner, luxurahair/kenbot-api, luxurahair/kennebec-meta-feed
+- **Hébergement production:** Render (cron toutes les 60 min)
+- **Base de données:** Supabase (tables: inventory, posts, events, sticker_pdfs, scrape_runs)
+- **Storage:** Supabase Storage (kennebec-raw, kennebec-stickers, kennebec-outputs)
+- **APIs:** Facebook Graph API, Kennebec Dodge website, OpenAI, Chrysler (stickers PDF)
+- **Stack:** Python 3.11, FastAPI, requests, BeautifulSoup, PDFMiner, Supabase client
 
-## Problème signalé
-Le cron ne détecte pas les posts publiés avec l'image placeholder "NO PHOTO" pour les mettre à jour quand les vraies photos deviennent disponibles.
+## Dashboard Emergent
+- **Stack:** React + FastAPI + MongoDB
+- **Design:** Swiss Brutalist (Archetype 4) - Chivo/IBM Plex Sans/IBM Plex Mono
+- **Fonctionnalités:**
+  - Overview: 4 stat cards (véhicules actifs, posts FB, sans photos, dernier run)
+  - Cron runs table avec badges status
+  - Posts mini-list avec badges NO PHOTO
+  - Inventaire complet avec filtrage
+  - Posts FB avec section NO PHOTO en rouge
+  - Architecture interactive (machine d'état, composants, flux)
+  - Changelog des fixes avec sévérités
 
-## Root Cause Analysis
-3 bugs identifiés dans `runner_cron_prod.py`:
+## Problème résolu - PHOTOS_ADDED
+3 bugs identifiés et corrigés dans `runner_cron_prod.py`:
 
-1. **Bug critique**: Le flag `no_photo` est toujours mis à `False` et `photo_count` à `1` lors de la création d'un post NEW avec le fallback NO_PHOTO. La détection PHOTOS_ADDED ne trouve donc jamais ces posts.
+### Bug 1 (CRITIQUE) - no_photo jamais True
+Le flag `no_photo` était toujours `False` et `photo_count` à `1` lors de la création d'un post NEW avec le fallback NO_PHOTO.
+**Fix:** Nouvelle fonction `_is_no_photo_fallback()` + `no_photo=True` / `photo_count=0`
 
-2. **Bug crash**: L'appel `_build_ad_text(sb, v, "NEW", run_id)` dans la section PHOTOS_ADDED a les arguments dans le mauvais ordre → crash systématique.
+### Bug 2 (CRITIQUE) - Arguments inversés
+`_build_ad_text(sb, v, "NEW", run_id)` → crash (mauvais ordre)
+**Fix:** `_build_ad_text(sb, run_id, slug, v, "NEW")`
 
-3. **Bug détection**: Les mots-clés de recherche dans `base_text` sont trop restrictifs et ne matchent pas les textes générés.
+### Bug 3 (MEDIUM) - Détection restrictive
+Mots-clés de recherche insuffisants dans base_text
+**Fix:** Ajout de "sans photo", "photo à venir", "photos à venir", "no_photo"
 
 ## Ce qui a été implémenté
-- ✅ Fonction `_is_no_photo_fallback()` pour détecter le fallback NO_PHOTO
-- ✅ Correction du flag `no_photo: True` / `photo_count: 0` lors de la création NEW avec fallback
-- ✅ Correction de l'ordre des arguments de `_build_ad_text` dans PHOTOS_ADDED
-- ✅ Ajout de mots-clés de détection supplémentaires
-- ✅ Logs détaillés pour le debugging
-- ✅ Vérification que les photos téléchargées pour PHOTOS_ADDED ne sont pas le fallback
+- [x] Dashboard d'administration kenbot complet (React + FastAPI)
+- [x] 5 onglets: Dashboard, Inventaire, Posts FB, Architecture, Changelog
+- [x] Données de démo seeded dans MongoDB
+- [x] Fix PHOTOS_ADDED dans `/app/kenbot-runner-fix/runner_cron_prod.py`
+- [x] Documentation des fixes dans `/app/kenbot-runner-fix/CHANGELOG_FIX.md`
+- [x] Tests 100% passés (backend 6/6 APIs, frontend all features)
 
-## Fichier corrigé
-- `/app/kenbot-runner-fix/runner_cron_prod.py`
-- `/app/kenbot-runner-fix/CHANGELOG_FIX.md`
-
-## Backlog / Améliorations futures
-- P0: Pousser le fix sur GitHub et vérifier le prochain run Render
-- P1: Ajouter des colonnes `no_photo` et `photo_count` explicitement dans Supabase si elles n'existent pas
-- P1: Script de migration pour marquer les anciens posts NO_PHOTO dans Supabase
-- P2: Monitoring/alertes quand le cron PHOTOS_ADDED traite des posts
-- P2: Dashboard web pour visualiser l'état des posts (avec/sans photos)
+## Backlog / Prochaines étapes
+- P0: Pousser le fix runner_cron_prod.py sur GitHub → redéploiement Render
+- P0: Script migration pour marquer anciens posts NO_PHOTO dans Supabase
+- P1: Connecter le dashboard aux données réelles Supabase (avec credentials)
+- P1: Bouton "Run Now" dans le dashboard pour trigger le cron manuellement
+- P2: Alertes email/webhook quand PHOTOS_ADDED détecte des posts
+- P2: Dashboard Luxura séparé (découplage Kennebec/Luxura)
+- P3: Monitoring temps réel des runs cron via WebSocket
