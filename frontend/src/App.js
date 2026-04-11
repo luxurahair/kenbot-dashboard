@@ -4,7 +4,7 @@ import './App.css';
 const API = process.env.REACT_APP_BACKEND_URL;
 
 function App() {
-  const [tab, setTab] = useState('dashboard');
+  const [tab, setTab] = useState('cockpit');
   const [status, setStatus] = useState(null);
   const [inventory, setInventory] = useState([]);
   const [posts, setPosts] = useState([]);
@@ -45,6 +45,7 @@ function App() {
       <div className="main-content">
         {loading ? <LoadingState /> : (
           <>
+            {tab === 'cockpit' && <CockpitTab inventory={inventory} status={status} />}
             {tab === 'dashboard' && <DashboardTab status={status} events={events} posts={posts} />}
             {tab === 'inventory' && <InventoryTab inventory={inventory} />}
             {tab === 'posts' && <PostsTab posts={posts} />}
@@ -62,6 +63,7 @@ function App() {
 function Header({ tab, setTab, status }) {
   const [showRunPanel, setShowRunPanel] = useState(false);
   const tabs = [
+    { id: 'cockpit', label: 'Cockpit' },
     { id: 'dashboard', label: 'Dashboard' },
     { id: 'inventory', label: 'Inventaire' },
     { id: 'posts', label: 'Posts FB' },
@@ -410,6 +412,213 @@ function ChangelogTab({ changelog }) {
     </div>
   );
 }
+
+
+function CockpitTab({ inventory, status }) {
+  const [simulating, setSimulating] = useState(false);
+  const [simResults, setSimResults] = useState(null);
+  const [maxTargets, setMaxTargets] = useState(3);
+  const [forceStock, setForceStock] = useState('');
+  const [expandedIdx, setExpandedIdx] = useState(null);
+  const [copiedIdx, setCopiedIdx] = useState(null);
+  const [logs, setLogs] = useState(null);
+  const [logsLoading, setLogsLoading] = useState(false);
+
+  const stats = status?.stats || {};
+  const inv = stats.inventory || {};
+  const postStats = stats.posts || {};
+
+  const runSimulation = async () => {
+    setSimulating(true);
+    setSimResults(null);
+    setExpandedIdx(null);
+    try {
+      const params = new URLSearchParams({ max_targets: maxTargets });
+      if (forceStock.trim()) params.set('force_stock', forceStock.trim());
+      const res = await fetch(`${API}/api/cockpit/simulate?${params}`, { method: 'POST' });
+      const data = await res.json();
+      setSimResults(data);
+      if (data.ok && data.results?.length > 0) setExpandedIdx(0);
+    } catch (e) {
+      setSimResults({ ok: false, error: e.message });
+    }
+    setSimulating(false);
+  };
+
+  const loadLogs = async () => {
+    setLogsLoading(true);
+    try {
+      const res = await fetch(`${API}/api/cockpit/recent-logs?limit=30`);
+      const data = await res.json();
+      setLogs(data);
+    } catch (e) { setLogs({ ok: false, error: e.message }); }
+    setLogsLoading(false);
+  };
+
+  const handleCopy = (text, idx) => {
+    navigator.clipboard.writeText(text);
+    setCopiedIdx(idx);
+    setTimeout(() => setCopiedIdx(null), 2000);
+  };
+
+  return (
+    <div data-testid="cockpit-tab">
+      <h2 className="section-title" data-testid="cockpit-title">Cockpit Kenbot</h2>
+
+      {/* Quick stats row */}
+      <div className="ck-stats-row">
+        <div className="ck-stat"><span className="ck-stat-val">{inv.active || 0}</span><span className="ck-stat-label">Inventaire actif</span></div>
+        <div className="ck-stat"><span className="ck-stat-val">{postStats.active || 0}</span><span className="ck-stat-label">Posts FB actifs</span></div>
+        <div className="ck-stat"><span className="ck-stat-val" style={{color: (postStats.no_photo||0) > 0 ? 'var(--accent-red)' : undefined}}>{postStats.no_photo || 0}</span><span className="ck-stat-label">Sans photos</span></div>
+        <div className="ck-stat"><span className="ck-stat-val">{(inv.active || 0) - (postStats.active || 0)}</span><span className="ck-stat-label">Sans post FB</span></div>
+      </div>
+
+      {/* Simulation panel */}
+      <div className="ck-sim-panel" data-testid="ck-sim-panel">
+        <div className="ck-sim-header">
+          <div>
+            <div className="ck-sim-title">Simulation Dry Run</div>
+            <div className="ck-sim-sub">Genere les textes IA sans publier — voir le resultat avant de lancer le vrai cron</div>
+          </div>
+          <div className="ck-sim-controls">
+            <div className="ck-sim-field">
+              <span className="ck-sim-field-label">Cibles</span>
+              <input type="number" value={maxTargets} onChange={e => setMaxTargets(parseInt(e.target.value) || 3)} min={1} max={10} className="ck-sim-input" data-testid="ck-max-targets" />
+            </div>
+            <div className="ck-sim-field">
+              <span className="ck-sim-field-label">Force stock</span>
+              <input type="text" value={forceStock} onChange={e => setForceStock(e.target.value)} placeholder="06193" className="ck-sim-input ck-sim-stock" data-testid="ck-force-stock" />
+            </div>
+            <button className="ck-sim-btn" onClick={runSimulation} disabled={simulating} data-testid="ck-simulate-btn">
+              {simulating ? 'SIMULATION EN COURS...' : 'SIMULER LE CRON'}
+            </button>
+          </div>
+        </div>
+
+        {/* Loading */}
+        {simulating && (
+          <div className="ck-loading">
+            <div className="tp-loading-bar"></div>
+            <span>Generation IA en cours pour {maxTargets} vehicule{maxTargets > 1 ? 's' : ''}...</span>
+          </div>
+        )}
+
+        {/* Results */}
+        {simResults && !simulating && (
+          simResults.ok ? (
+            <div className="ck-results" data-testid="ck-results">
+              <div className="ck-results-header">
+                <span>{simResults.count} vehicule{simResults.count > 1 ? 's' : ''} traite{simResults.count > 1 ? 's' : ''}</span>
+                <span className="ck-results-time">{simResults.elapsed_seconds}s</span>
+              </div>
+              {simResults.results.map((r, i) => (
+                <div key={r.stock || i} className={`ck-result-card ${expandedIdx === i ? 'expanded' : ''}`} data-testid={`ck-result-${i}`}>
+                  <div className="ck-result-header" onClick={() => setExpandedIdx(expandedIdx === i ? null : i)}>
+                    <div className="ck-result-left">
+                      <span className="ck-result-stock">{r.stock}</span>
+                      <span className="ck-result-title">{r.title}</span>
+                      <span className={`badge ${r.event === 'NEW' ? 'badge-ok' : r.event === 'PREVIEW' ? 'badge-info' : 'badge-warning'}`}>{r.event}</span>
+                      {r.generation_method && <span className={`badge ${r.generation_method.includes('STICKER') ? 'ck-badge-sticker' : 'ck-badge-llm'}`}>{r.generation_method}</span>}
+                      {r.vin_decoded && <span className="badge ck-badge-vin">VIN</span>}
+                    </div>
+                    <div className="ck-result-right">
+                      {r.error ? (
+                        <span className="badge badge-error">ERREUR</span>
+                      ) : (
+                        <span className="badge badge-ok">{r.chars} chars</span>
+                      )}
+                      {r.elapsed && <span className="ck-result-time">{r.elapsed}s</span>}
+                      <span className="ck-expand-icon">{expandedIdx === i ? '−' : '+'}</span>
+                    </div>
+                  </div>
+
+                  {expandedIdx === i && (
+                    <div className="ck-result-body">
+                      {/* Intelligence row */}
+                      {r.intelligence && (
+                        <div className="ck-intel-row">
+                          {r.intelligence.brand && <span className="ck-intel-tag">{r.intelligence.brand}</span>}
+                          {r.intelligence.model && <span className="ck-intel-tag">{r.intelligence.model}</span>}
+                          {r.intelligence.trim && <span className="ck-intel-tag">{r.intelligence.trim}</span>}
+                          {r.intelligence.type && <span className={`ck-intel-tag ck-type-${r.intelligence.type}`}>{r.intelligence.type}</span>}
+                          {r.intelligence.hp && <span className="ck-intel-tag ck-hp">{r.intelligence.engine} — {r.intelligence.hp} HP</span>}
+                          {r.intelligence.vibe && <span className="ck-intel-tag ck-vibe">{r.intelligence.vibe}</span>}
+                        </div>
+                      )}
+                      {/* VIN specs */}
+                      {r.vin_specs && (
+                        <div className="ck-vin-row">
+                          {r.vin_specs.drive && <span className="tp-vin-tag">{r.vin_specs.drive}</span>}
+                          {r.vin_specs.transmission && <span className="tp-vin-tag">{r.vin_specs.transmission}</span>}
+                          {r.vin_specs.fuel && <span className="tp-vin-tag">{r.vin_specs.fuel}</span>}
+                          {r.vin_specs.electrification && <span className="tp-vin-tag tp-vin-elec">{r.vin_specs.electrification}</span>}
+                          {r.vin_specs.seats && <span className="tp-vin-tag">{r.vin_specs.seats} places</span>}
+                          {r.vin_specs.country && <span className="tp-vin-tag">{r.vin_specs.country}</span>}
+                        </div>
+                      )}
+                      {/* Text */}
+                      {r.text ? (
+                        <div className="ck-text-wrap">
+                          <div className="ck-text-actions">
+                            <button className="tp-copy-btn" onClick={() => handleCopy(r.text, i)} style={{padding:'4px 12px',fontSize:'0.65rem'}}>
+                              {copiedIdx === i ? 'COPIE !' : 'COPIER'}
+                            </button>
+                          </div>
+                          <div className="ck-text-body">{r.text}</div>
+                        </div>
+                      ) : r.error ? (
+                        <div className="ck-error">{r.error}</div>
+                      ) : null}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="ck-error">{simResults.error}</div>
+          )
+        )}
+      </div>
+
+      {/* Recent logs */}
+      <div className="ck-logs-panel" data-testid="ck-logs-panel">
+        <div className="ck-logs-header">
+          <span className="ck-sim-title">Logs recents (Supabase)</span>
+          <button className="ck-logs-btn" onClick={loadLogs} disabled={logsLoading} data-testid="ck-logs-btn">
+            {logsLoading ? 'CHARGEMENT...' : 'CHARGER LES LOGS'}
+          </button>
+        </div>
+        {logs?.ok && (
+          <div className="ck-logs-body">
+            {logs.runs?.length > 0 && (
+              <div className="ck-runs">
+                <div className="ck-runs-title">Derniers runs</div>
+                {logs.runs.map((r, i) => (
+                  <div key={r.run_id || i} className="ck-run-item">
+                    <span className={`badge ${r.status === 'ok' ? 'badge-ok' : 'badge-error'}`}>{r.status}</span>
+                    <span className="ck-run-date">{formatDateTime(r.created_at)}</span>
+                    <span className="ck-run-note">{r.note || ''}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+            <div className="ck-events-list">
+              {(logs.events || []).slice(0, 20).map((e, i) => (
+                <div key={e.id || i} className="ck-event-item">
+                  <span className="ck-ev-date">{formatDateTime(e.created_at)}</span>
+                  <EventBadge type={e.type} />
+                  <span className="ck-ev-slug">{(e.slug || '').slice(0, 30)}</span>
+                  <span className="ck-ev-payload">{e.payload ? JSON.stringify(e.payload).slice(0, 60) : ''}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 
 function TextPreviewTab({ inventory, onSelectStock, selectedStock }) {
   const [search, setSearch] = useState('');

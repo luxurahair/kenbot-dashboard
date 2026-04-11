@@ -672,6 +672,297 @@ async def test_batch_generate(limit: int = 3):
 async def get_architecture():
     return ARCHITECTURE
 
+# ═══════════════════════════════════════════════════
+# COCKPIT — Simulation Dry Run + VIN Decode batch
+# ═══════════════════════════════════════════════════
+
+@api_router.get("/cockpit/decode-vin/{stock}")
+async def cockpit_decode_vin(stock: str):
+    """Decode le VIN d'un vehicule et retourne les specs NHTSA."""
+    if not sb:
+        return {"ok": False, "error": "Supabase non connecte"}
+    try:
+        from vin_decoder import decode_vin, format_specs_for_prompt, format_engine_line
+        result = sb.table("inventory").select("stock,title,vin,price_int,km_int").eq("stock", stock.upper()).limit(1).execute()
+        if not result.data:
+            return {"ok": False, "error": f"Vehicule {stock} non trouve"}
+        v = result.data[0]
+        vin_val = (v.get("vin") or "").strip()
+        if len(vin_val) < 11:
+            return {"ok": False, "error": "VIN trop court ou absent", "vehicle": v}
+        specs = decode_vin(vin_val)
+        if not specs:
+            return {"ok": False, "error": "NHTSA n'a pas retourne de donnees", "vehicle": v}
+        return {
+            "ok": True,
+            "vehicle": v,
+            "specs": specs,
+            "engine_line": format_engine_line(specs),
+            "specs_text": format_specs_for_prompt(specs),
+        }
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+@api_router.post("/cockpit/simulate")
+async def cockpit_simulate(max_targets: int = 4, force_stock: Optional[str] = None):
+    """Simule un dry run du cron: detecte les cibles et genere les textes SANS publier."""
+    if not sb:
+        return {"ok": False, "error": "Supabase non connecte"}
+
+    from vehicle_intelligence import build_vehicle_context
+    from emergentintegrations.llm.chat import LlmChat, UserMessage
+    import time as _time
+
+    start = _time.time()
+    results = []
+
+    try:
+        # Get active inventory
+        inv_data = sb.table("inventory").select("*").eq("status", "ACTIVE").order("updated_at", desc=True).limit(200).execute()
+        inventory = {v.get("stock", "").upper(): v for v in (inv_data.data or []) if v.get("stock")}
+
+        # Get active posts
+        posts_data = sb.table("posts").select("stock,post_id,base_text,published_at,no_photo,status").eq("status", "ACTIVE").limit(500).execute()
+        posts_map = {(p.get("stock") or "").upper(): p for p in (posts_data.data or []) if p.get("stock")}
+
+        # If force_stock, just simulate for that one
+        if force_stock:
+            stock = force_stock.strip().upper()
+            if stock in inventory:
+                v = inventory[stock]
+                has_post = stock in posts_map
+                event = "NEW" if not has_post else "UPDATE"
+                res = await _simulate_one_vehicle(v, event, posts_map.get(stock))
+                results.append(res)
+            else:
+                results.append({"stock": stock, "error": "Stock non trouve dans l'inventaire actif"})
+        else:
+            # Detect targets: vehicles without posts (NEW) or candidates for update
+            new_targets = []
+            for stock, v in inventory.items():
+                if stock not in posts_map:
+                    new_targets.append((stock, v, "NEW"))
+
+            # Take top targets
+            targets = new_targets[:max_targets]
+
+            # If not enough new, pick some existing for preview
+            if len(targets) < max_targets:
+                existing = [(s, v, "PREVIEW") for s, v in list(inventory.items())[:max_targets * 2] if s in posts_map]
+                targets.extend(existing[:max_targets - len(targets)])
+
+            for stock, v, event in targets[:max_targets]:
+                res = await _simulate_one_vehicle(v, event, posts_map.get(stock))
+                results.append(res)
+
+    except Exception as e:
+        import traceback
+        return {"ok": False, "error": str(e), "traceback": traceback.format_exc()}
+
+    elapsed = round(_time.time() - start, 1)
+    return {
+        "ok": True,
+        "count": len(results),
+        "elapsed_seconds": elapsed,
+        "inventory_active": len(inventory) if 'inventory' in dir() else 0,
+        "posts_active": len(posts_map) if 'posts_map' in dir() else 0,
+        "results": results,
+    }
+
+
+async def _simulate_one_vehicle(v: Dict[str, Any], event: str, existing_post: Optional[Dict] = None) -> Dict[str, Any]:
+    """Simule la generation de texte pour un vehicule."""
+    from vehicle_intelligence import build_vehicle_context
+    from emergentintegrations.llm.chat import LlmChat, UserMessage
+    import time as _time
+
+    stock = (v.get("stock") or "").strip().upper()
+    vin_val = (v.get("vin") or "").strip().upper()
+    title = v.get("title", "")
+    start = _time.time()
+
+    result = {
+        "stock": stock,
+        "title": title,
+        "vin": vin_val,
+        "price": v.get("price_int"),
+        "km": v.get("km_int"),
+        "event": event,
+        "has_existing_post": existing_post is not None,
+        "generation_method": None,
+        "text": None,
+        "chars": 0,
+        "vin_decoded": False,
+        "vin_specs": None,
+        "intelligence": None,
+        "is_sticker": False,
+        "error": None,
+    }
+
+    # 1. Vehicle Intelligence
+    try:
+        ctx = build_vehicle_context(v)
+        result["intelligence"] = {
+            "brand": ctx.get("brand"),
+            "model": ctx.get("model"),
+            "trim": ctx.get("trim"),
+            "type": ctx.get("vehicle_type"),
+            "hp": ctx.get("hp"),
+            "engine": ctx.get("engine"),
+            "vibe": ctx.get("trim_vibe"),
+        }
+    except Exception:
+        ctx = {}
+
+    # 2. VIN Decode
+    vin_specs_text = ""
+    if len(vin_val) >= 11:
+        try:
+            from vin_decoder import decode_vin, format_specs_for_prompt, format_engine_line
+            specs = decode_vin(vin_val)
+            if specs:
+                result["vin_decoded"] = True
+                result["vin_specs"] = {
+                    "engine": format_engine_line(specs),
+                    "drive": specs.get("drive_type", ""),
+                    "transmission": specs.get("transmission", ""),
+                    "fuel": specs.get("fuel_primary", ""),
+                    "electrification": specs.get("electrification", ""),
+                    "seats": specs.get("seats", ""),
+                    "country": specs.get("plant_country", ""),
+                }
+                vin_specs_text = format_specs_for_prompt(specs)
+                if not ctx.get("hp") and specs.get("engine_hp"):
+                    result["intelligence"]["hp"] = specs["engine_hp"]
+                    result["intelligence"]["engine"] = format_engine_line(specs).replace(f" — {specs['engine_hp']} HP", "")
+        except Exception:
+            pass
+
+    # 3. Check if sticker post exists
+    has_sticker = False
+    sticker_text = ""
+    if existing_post and existing_post.get("base_text"):
+        bt = existing_post["base_text"]
+        has_sticker = "ACCESSOIRES" in bt or "Window Sticker" in bt
+        if has_sticker:
+            sticker_text = bt
+            result["is_sticker"] = True
+
+    # 4. Generate text
+    api_key = os.environ.get("EMERGENT_LLM_KEY", "")
+    if not api_key:
+        result["error"] = "EMERGENT_LLM_KEY manquant"
+        return result
+
+    try:
+        if has_sticker and sticker_text:
+            # Stellantis sticker humanization
+            result["generation_method"] = "STICKER+AI"
+            text = await _cockpit_humanize_sticker(api_key, sticker_text, v, ctx, vin_specs_text)
+        else:
+            # Standard generation with VIN
+            result["generation_method"] = "LLM_V3+VIN" if vin_specs_text else "LLM_V3"
+            text = await _cockpit_generate_text(api_key, v, ctx, vin_specs_text)
+
+        if text:
+            result["text"] = text
+            result["chars"] = len(text)
+        else:
+            result["error"] = "Generation retourne vide"
+    except Exception as e:
+        result["error"] = str(e)
+
+    result["elapsed"] = round(_time.time() - start, 1)
+    return result
+
+
+async def _cockpit_generate_text(api_key: str, v: Dict, ctx: Dict, vin_specs_text: str) -> str:
+    """Genere un texte via LlmChat (meme prompts que generate-text endpoint)."""
+    from emergentintegrations.llm.chat import LlmChat, UserMessage
+    from vehicle_intelligence import humanize_options
+    import random
+
+    vtype = ctx.get("vehicle_type", "general")
+    tone_map = {
+        "muscle_car": "adrenaline et son du moteur", "pickup": "robustesse et capacite",
+        "pickup_hd": "robustesse et capacite", "off_road": "aventure et liberte",
+        "suv_premium": "confort et raffinement", "citadine": "style et economie",
+        "suv_compact": "style et economie", "exotique": "exclusivite et reve",
+    }
+    tone = tone_map.get(vtype, "polyvalence et fiabilite")
+    style = random.choice(["direct", "storytelling", "question", "expertise", "opportunite"])
+
+    specs_info = []
+    if not vin_specs_text:
+        if ctx.get("hp"):
+            specs_info.append(f"Moteur: {ctx['engine']} — {ctx['hp']} chevaux")
+    if ctx.get("trim_vibe"):
+        specs_info.append(f"Ce trim: {ctx['trim_vibe']}")
+    if ctx.get("model_known_for"):
+        specs_info.append(f"Ce modele: {ctx['model_known_for']}")
+
+    system_msg = "Tu es Daniel Giroux, vendeur passionne chez Kennebec Dodge Chrysler a Saint-Georges.\nREGLES: Francais quebecois naturel. Passionne mais professionnel. AUCUN mot vulgaire. JAMAIS mentionner la Beauce. Max 3-4 phrases d'intro. Pas de cliches."
+
+    price = v.get("price_int", 0)
+    km = v.get("km_int", 0)
+    prompt = f"""Ecris une annonce Facebook:
+VEHICULE: {v.get('title','')}
+PRIX: {f'{price:,}'.replace(',', ' ')} $ | KM: {f'{km:,}'.replace(',', ' ')} km
+STOCK: {v.get('stock','')}
+TYPE: {vtype} | TON: {tone} | STYLE: {style}
+{chr(10).join(specs_info) if specs_info else ''}
+{f'SPECS VIN:{chr(10)}{vin_specs_text}' if vin_specs_text else ''}
+Intro 3-4 phrases + corps structure + Daniel Giroux 418-222-3939"""
+
+    chat = LlmChat(api_key=api_key, session_id=f"sim-{v.get('stock','')}-{uuid.uuid4().hex[:6]}", system_message=system_msg)
+    chat.with_model("openai", "gpt-4o")
+    return await chat.send_message(UserMessage(text=prompt))
+
+
+async def _cockpit_humanize_sticker(api_key: str, sticker_text: str, v: Dict, ctx: Dict, vin_specs_text: str) -> str:
+    """Humanise un texte sticker via LlmChat."""
+    from emergentintegrations.llm.chat import LlmChat, UserMessage
+
+    system_msg = (
+        "Tu es Daniel Giroux, vendeur passionne chez Kennebec Dodge Chrysler.\n"
+        "Humanise cette annonce sticker:\n"
+        "1. INTRO 3-4 phrases passionnees. AUCUN mot vulgaire. JAMAIS 'Beauce'.\n"
+        "2. TITRE vendeur au lieu du titre brut.\n"
+        "3. OPTIONS: ✅ MAJUSCULES humanisees, ▫️ minuscules. NE SUPPRIME AUCUNE LIGNE.\n"
+        "4. Apres le lien sticker: COPIE EXACTE du footer.\n"
+        "NE RAJOUTE RIEN a la fin."
+    )
+    prompt = f"Humanise:\n\n{sticker_text}"
+    if vin_specs_text:
+        prompt += f"\n\nSPECS VIN:\n{vin_specs_text}"
+
+    chat = LlmChat(api_key=api_key, session_id=f"sim-stk-{v.get('stock','')}-{uuid.uuid4().hex[:6]}", system_message=system_msg)
+    chat.with_model("openai", "gpt-4o")
+    resp = await chat.send_message(UserMessage(text=prompt))
+
+    # Couper après les hashtags
+    lines = resp.split("\n")
+    output = []
+    for line in lines:
+        output.append(line)
+        if line.strip().startswith("#") and "DanielGiroux" in line:
+            break
+    return "\n".join(output).strip()
+
+
+@api_router.get("/cockpit/recent-logs")
+async def cockpit_recent_logs(limit: int = 30):
+    """Retourne les events recents groupes par run."""
+    if not sb:
+        return {"ok": False, "error": "Supabase non connecte"}
+    events = sb_query("events", "*", order="created_at", limit=limit)
+    runs = sb_query("scrape_runs", "*", order="created_at", limit=5)
+    return {
+        "ok": True,
+        "events": events["data"],
+        "runs": runs["data"],
+    }
+
 @api_router.post("/status", response_model=StatusCheck)
 async def create_status_check(input: StatusCheckCreate):
     status_dict = input.model_dump()

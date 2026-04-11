@@ -79,6 +79,17 @@
   4. P3: Sticker brut + intro (fallback)
   5. P4: Text engine externe (dernier recours)
 
+### Session 8 - Cockpit Kenbot (Centre de Controle)
+- Nouvel onglet "Cockpit" comme page par defaut
+- Stats rapides: inventaire actif, posts FB, sans photos, sans post FB
+- **Simulation Dry Run**: un clic genere les textes IA pour X vehicules SANS publier
+  - Montre le texte genere, la methode (STICKER+AI / LLM_V3+VIN / LLM_V3), les specs VIN
+  - Tags intelligence: marque, modele, trim, type, HP, vibe
+  - Tags VIN NHTSA: 4WD, transmission, fuel, places, pays
+  - Bouton COPIER pour chaque texte
+- Logs recents Supabase: derniers runs + events en temps reel
+- Endpoints: /api/cockpit/simulate, /api/cockpit/decode-vin/{stock}, /api/cockpit/recent-logs
+
 ## Backlog
 - P0: Push sur GitHub via "Save to Github" pour deployer llm_v3 sur Render
 - P1: Enrichir la base de connaissance (plus de modeles)
