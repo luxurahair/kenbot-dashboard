@@ -105,7 +105,7 @@ POST_COOLDOWN_DAYS = int(os.getenv("KENBOT_POST_COOLDOWN_DAYS", "7"))
 PHOTO_RETRIES = int(os.getenv("KENBOT_PHOTO_RETRIES", "3"))
 ALLOW_NO_PHOTO = os.getenv("KENBOT_ALLOW_NO_PHOTO", "0").strip() == "1"
 NO_PHOTO_BUCKET = (os.getenv("KENBOT_NO_PHOTO_BUCKET") or OUTPUTS_BUCKET).strip()
-NO_PHOTO_PATH = (os.getenv("KENBOT_NO_PHOTO_PATH") or "assets/no_photo.png").strip().lstrip("/")
+NO_PHOTO_PATH = (os.getenv("KENBOT_NO_PHOTO_PATH") or "assets/no_photo.jpg").strip().lstrip("/")
 # PHOTOS_ADDED / REFRESH_NO_PHOTO: Utilise les variables existantes de votre système
 REFRESH_NO_PHOTO_DAILY = os.getenv("KENBOT_REFRESH_NO_PHOTO_DAILY", "1").strip() == "1"
 REFRESH_NO_PHOTO_LIMIT = int(os.getenv("KENBOT_REFRESH_NO_PHOTO_LIMIT", "25"))
