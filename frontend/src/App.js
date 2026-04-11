@@ -518,6 +518,10 @@ function TextPreviewTab({ inventory, onSelectStock, selectedStock }) {
                     Stock: {selectedStock}
                     {selectedVehicle?.vin && <> &middot; VIN: {selectedVehicle.vin}</>}
                   </div>
+                  <div className="tp-vh-price-row">
+                    <span className="tp-vh-price">{selectedVehicle?.price_int ? `${selectedVehicle.price_int.toLocaleString()} $` : ''}</span>
+                    <span className="tp-vh-km">{selectedVehicle?.km_int ? `${selectedVehicle.km_int.toLocaleString()} km` : ''}</span>
+                  </div>
                 </div>
                 <div className="tp-actions">
                   <button
