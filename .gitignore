@@ -25,3 +25,18 @@ credentials.json
 *.pem
 *.key
 .credentials
+
+# Emergent platform (do not push)
+frontend/
+backend/
+scripts/
+node_modules/
+yarn.lock
+package.json
+kenbot-runner-fix/
+memory/
+test_reports/
+test_result.md
+backend_test.py
+design_guidelines.json
+.emergent/
