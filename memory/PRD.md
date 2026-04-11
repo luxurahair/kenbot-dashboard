@@ -55,9 +55,17 @@
   - Priorite 3: text_engine externe (fallback)
   - Options sticker passees a llm_v3 pour enrichir le texte IA
 
+### Session 6 - Onglet Preview Texte (Dashboard)
+- Nouvel onglet "Preview Texte" dans le dashboard
+- Liste des vehicules actifs avec recherche (stock, titre, VIN)
+- Selection avec surbrillance, header vehicule avec stock/VIN
+- Panneau Intelligence Vehicule: marque, modele, trim, type, moteur/HP, vibe, km, prix
+- Generation IA via GPT-4o (emergentintegrations): affichage texte + chars + style + modele
+- Boutons GENERER, REGENERER, COPIER
+- Tests: 27/27 backend + 100% frontend (iteration_3.json)
+
 ## Backlog
-- P0: Tester la generation sur Render (push via Save to GitHub puis verifier les logs du prochain cron)
-- P1: Ajouter un onglet "Preview Texte" dans le dashboard
+- P0: Push sur GitHub via "Save to Github" pour deployer llm_v3 sur Render
 - P1: Enrichir la base de connaissance (plus de modeles)
 - P1: Implementer les 9 variables Render orphelines dans le code (ou les retirer)
 - P2: Multi-dealer (Luxura)
