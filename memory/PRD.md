@@ -34,10 +34,18 @@
 - /app/llm_v3.py - Generation texte v3 (OpenAI)
 - /app/kenbot-runner-fix/ - Fichiers corriges originaux
 
+### Session 4 - Audit Variables d'Environnement
+- Extraction des variables Render depuis 5 screenshots -> RENDER_ENV_REFERENCE.md
+- Audit complet: 30 variables mappees, 9 orphelines, ~20 absentes de Render (avec defaults), 4 divergences non bloquantes
+- Rapport detaille genere -> AUDIT_ENV_VARIABLES.md
+
 ## Backlog
 - P0: Integrer llm_v3 dans runner_cron_prod.py (remplacer l'ancien llm.py)
 - P0: Tester la generation avec la cle OpenAI sur les vrais vehicules
 - P1: Ajouter un onglet "Preview Texte" dans le dashboard
 - P1: Enrichir la base de connaissance (plus de modeles)
+- P1: Implementer les 9 variables Render orphelines dans le code (ou les retirer)
 - P2: Multi-dealer (Luxura)
 - P2: A/B testing des styles d'intro
+- P2: Alertes/notifications (token FB expire, echec cron)
+- P3: Decouper runner.py en services modulaires
