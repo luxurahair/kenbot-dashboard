@@ -12,6 +12,7 @@ function App() {
   const [changelog, setChangelog] = useState([]);
   const [architecture, setArchitecture] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [selectedStock, setSelectedStock] = useState(null);
 
   const fetchAll = useCallback(async () => {
     setLoading(true);
@@ -47,6 +48,7 @@ function App() {
             {tab === 'dashboard' && <DashboardTab status={status} events={events} posts={posts} />}
             {tab === 'inventory' && <InventoryTab inventory={inventory} />}
             {tab === 'posts' && <PostsTab posts={posts} />}
+            {tab === 'textpreview' && <TextPreviewTab inventory={inventory} onSelectStock={setSelectedStock} selectedStock={selectedStock} />}
             {tab === 'events' && <EventsTab events={events} />}
             {tab === 'architecture' && <ArchitectureTab architecture={architecture} />}
             {tab === 'changelog' && <ChangelogTab changelog={changelog} />}
@@ -63,6 +65,7 @@ function Header({ tab, setTab, status }) {
     { id: 'dashboard', label: 'Dashboard' },
     { id: 'inventory', label: 'Inventaire' },
     { id: 'posts', label: 'Posts FB' },
+    { id: 'textpreview', label: 'Preview Texte' },
     { id: 'events', label: 'Events' },
     { id: 'architecture', label: 'Architecture' },
     { id: 'changelog', label: 'Changelog' },
@@ -404,6 +407,224 @@ function ChangelogTab({ changelog }) {
           </div>
         </div>
       ))}
+    </div>
+  );
+}
+
+function TextPreviewTab({ inventory, onSelectStock, selectedStock }) {
+  const [search, setSearch] = useState('');
+  const [generating, setGenerating] = useState(false);
+  const [result, setResult] = useState(null);
+  const [copied, setCopied] = useState(false);
+  const [genCount, setGenCount] = useState(0);
+
+  const activeVehicles = (inventory || []).filter(v => v.status === 'ACTIVE');
+  const filtered = activeVehicles.filter(v => {
+    if (!search) return true;
+    const s = search.toLowerCase();
+    return (v.title || '').toLowerCase().includes(s)
+      || (v.stock || '').toLowerCase().includes(s)
+      || (v.vin || '').toLowerCase().includes(s);
+  });
+
+  const handleGenerate = async (stock) => {
+    if (!stock) return;
+    setGenerating(true);
+    setResult(null);
+    setCopied(false);
+    try {
+      const res = await fetch(`${API}/api/generate-text/${stock}`, { method: 'POST' });
+      const data = await res.json();
+      setResult(data);
+      setGenCount(c => c + 1);
+    } catch (e) {
+      setResult({ ok: false, error: e.message });
+    }
+    setGenerating(false);
+  };
+
+  const handleSelect = (stock) => {
+    onSelectStock(stock);
+    setResult(null);
+    setCopied(false);
+  };
+
+  const handleCopy = () => {
+    if (result?.text) {
+      navigator.clipboard.writeText(result.text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
+  };
+
+  const intel = result?.intelligence || {};
+  const selectedVehicle = activeVehicles.find(v => v.stock === selectedStock);
+  // Pre-fill basic info from inventory when no AI result yet
+  const displayKm = intel.km_formatted || (selectedVehicle?.km_int ? `${selectedVehicle.km_int.toLocaleString()} km` : '—');
+  const displayPrice = intel.price_formatted || (selectedVehicle?.price_int ? `${selectedVehicle.price_int.toLocaleString()} $` : '—');
+
+  return (
+    <div data-testid="text-preview-tab">
+      <h2 className="section-title" data-testid="text-preview-title">Preview Texte IA</h2>
+
+      <div className="tp-layout">
+        {/* Left: Vehicle selector */}
+        <div className="tp-sidebar" data-testid="tp-sidebar">
+          <div className="tp-search-wrap">
+            <input
+              className="tp-search"
+              type="text"
+              placeholder="Rechercher stock, titre, VIN..."
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              data-testid="tp-search-input"
+            />
+            <span className="tp-count">{filtered.length} vehicules</span>
+          </div>
+          <div className="tp-vehicle-list" data-testid="tp-vehicle-list">
+            {filtered.map((v, i) => (
+              <div
+                key={v.stock || i}
+                className={`tp-vehicle-item ${selectedStock === v.stock ? 'selected' : ''}`}
+                onClick={() => handleSelect(v.stock)}
+                data-testid={`tp-vehicle-${v.stock}`}
+              >
+                <div className="tp-v-stock">{v.stock}</div>
+                <div className="tp-v-title">{v.title || v.slug?.replace(/-/g, ' ')}</div>
+                <div className="tp-v-meta">
+                  <span>{v.price_int ? `${v.price_int.toLocaleString()} $` : '--'}</span>
+                  <span>{v.km_int ? `${v.km_int.toLocaleString()} km` : '--'}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Right: Preview panel */}
+        <div className="tp-preview" data-testid="tp-preview-panel">
+          {!selectedStock ? (
+            <div className="tp-empty" data-testid="tp-empty-state">
+              <div className="tp-empty-icon">AI</div>
+              <div className="tp-empty-title">Selectionnez un vehicule</div>
+              <div className="tp-empty-sub">Cliquez sur un vehicule dans la liste pour generer un apercu du texte Facebook IA</div>
+            </div>
+          ) : (
+            <>
+              {/* Vehicle header */}
+              <div className="tp-vehicle-header" data-testid="tp-vehicle-header">
+                <div>
+                  <div className="tp-vh-title">{selectedVehicle?.title || selectedStock}</div>
+                  <div className="tp-vh-meta">
+                    Stock: {selectedStock}
+                    {selectedVehicle?.vin && <> &middot; VIN: {selectedVehicle.vin}</>}
+                  </div>
+                </div>
+                <div className="tp-actions">
+                  <button
+                    className="tp-generate-btn"
+                    onClick={() => handleGenerate(selectedStock)}
+                    disabled={generating}
+                    data-testid="tp-generate-btn"
+                  >
+                    {generating ? 'GENERATION...' : genCount > 0 && result?.ok ? 'REGENERER' : 'GENERER LE TEXTE'}
+                  </button>
+                  {result?.ok && (
+                    <button className="tp-copy-btn" onClick={handleCopy} data-testid="tp-copy-btn">
+                      {copied ? 'COPIE !' : 'COPIER'}
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Intelligence panel */}
+              {(result?.intelligence || selectedVehicle) && (
+                <div className="tp-intel" data-testid="tp-intel-panel">
+                  <div className="tp-intel-title">Intelligence Vehicule</div>
+                  <div className="tp-intel-grid">
+                    <div className="tp-intel-item">
+                      <span className="tp-il">Marque</span>
+                      <span className="tp-iv">{intel.brand || '—'}</span>
+                    </div>
+                    <div className="tp-intel-item">
+                      <span className="tp-il">Modele</span>
+                      <span className="tp-iv">{intel.model || '—'}</span>
+                    </div>
+                    <div className="tp-intel-item">
+                      <span className="tp-il">Trim</span>
+                      <span className="tp-iv">{intel.trim || '—'}</span>
+                    </div>
+                    <div className="tp-intel-item">
+                      <span className="tp-il">Type</span>
+                      <span className="tp-iv">
+                        <span className={`badge tp-type-badge tp-type-${intel.vehicle_type || 'general'}`}>
+                          {intel.vehicle_type || '—'}
+                        </span>
+                      </span>
+                    </div>
+                    {intel.hp && (
+                      <div className="tp-intel-item">
+                        <span className="tp-il">Moteur</span>
+                        <span className="tp-iv tp-engine">{intel.engine} — {intel.hp} HP</span>
+                      </div>
+                    )}
+                    {intel.trim_vibe && (
+                      <div className="tp-intel-item tp-intel-wide">
+                        <span className="tp-il">Vibe</span>
+                        <span className="tp-iv tp-vibe">{intel.trim_vibe}</span>
+                      </div>
+                    )}
+                    <div className="tp-intel-item">
+                      <span className="tp-il">KM</span>
+                      <span className="tp-iv">{displayKm} {intel.km_description && <span className="tp-desc">({intel.km_description})</span>}</span>
+                    </div>
+                    <div className="tp-intel-item">
+                      <span className="tp-il">Prix</span>
+                      <span className="tp-iv">{displayPrice} {intel.price_description && <span className="tp-desc">({intel.price_description})</span>}</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Generated text */}
+              {generating && (
+                <div className="tp-loading" data-testid="tp-loading">
+                  <div className="tp-loading-bar"></div>
+                  <span>Generation du texte via GPT-4o...</span>
+                </div>
+              )}
+
+              {result && !generating && (
+                result.ok ? (
+                  <div className="tp-text-result" data-testid="tp-text-result">
+                    <div className="tp-text-header">
+                      <span className="tp-text-label">Texte Facebook genere</span>
+                      <div className="tp-text-meta">
+                        <span className="badge badge-ok">{result.chars} chars</span>
+                        <span className="badge badge-info">style: {result.style}</span>
+                        <span className="badge badge-active">{result.model}</span>
+                      </div>
+                    </div>
+                    <div className="tp-text-body" data-testid="tp-text-body">
+                      {result.text}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="tp-error" data-testid="tp-error">
+                    <span className="badge badge-error">ERREUR</span>
+                    <span>{result.error}</span>
+                  </div>
+                )
+              )}
+
+              {!result && !generating && (
+                <div className="tp-hint" data-testid="tp-hint">
+                  Cliquez sur "GENERER LE TEXTE" pour voir l'apercu IA
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
