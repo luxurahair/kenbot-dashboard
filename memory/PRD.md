@@ -58,10 +58,12 @@
 ### Session 6 - Onglet Preview Texte (Dashboard)
 - Nouvel onglet "Preview Texte" dans le dashboard
 - Liste des vehicules actifs avec recherche (stock, titre, VIN)
-- Selection avec surbrillance, header vehicule avec stock/VIN
+- Selection avec surbrillance, header vehicule avec stock/VIN/prix/km
 - Panneau Intelligence Vehicule: marque, modele, trim, type, moteur/HP, vibe, km, prix
 - Generation IA via GPT-4o (emergentintegrations): affichage texte + chars + style + modele
-- Boutons GENERER, REGENERER, COPIER
+- Boutons GENERER TEXTE, HUMANISER STICKER (Stellantis), COPIER
+- Humanisation sticker Stellantis: intro IA + titre vendeur + options ✅ MAJUSCULES + sous-options ▫️ minuscules + footer intact
+- Filtre anti-vulgarite ajoute (prompt + post-process)
 - Tests: 27/27 backend + 100% frontend (iteration_3.json)
 
 ## Backlog

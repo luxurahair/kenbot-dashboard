@@ -591,6 +591,21 @@ tr:hover td { background: var(--surface-secondary); }
   text-transform: uppercase;
 }
 .tp-copy-btn:hover { background: #00b359; border-color: #00b359; }
+.tp-sticker-btn {
+  font-family: 'Chivo', sans-serif;
+  font-weight: 700;
+  font-size: 0.7rem;
+  letter-spacing: 0.1em;
+  padding: 8px 18px;
+  background: #7C3AED;
+  color: white;
+  border: 2px solid #7C3AED;
+  cursor: pointer;
+  transition: all 150ms;
+  text-transform: uppercase;
+}
+.tp-sticker-btn:hover { background: #6D28D9; border-color: #6D28D9; }
+.tp-sticker-btn:disabled { background: rgba(124,58,237,0.3); border-color: rgba(124,58,237,0.3); cursor: wait; }
 
 /* Intelligence panel */
 .tp-intel {

@@ -491,6 +491,126 @@ STYLE D'INTRO: {style}"""
         import traceback
         return {"ok": False, "error": str(e), "traceback": traceback.format_exc()}
 
+@api_router.post("/humanize-sticker/{stock}")
+async def humanize_sticker_text(stock: str):
+    """Humanise une annonce Stellantis existante (sticker_to_ad) avec l'IA."""
+    if not sb:
+        return {"ok": False, "error": "Supabase non connecte"}
+    try:
+        from vehicle_intelligence import build_vehicle_context
+        from emergentintegrations.llm.chat import LlmChat, UserMessage
+
+        # Get vehicle info
+        inv_result = sb.table("inventory").select("*").eq("stock", stock.upper()).limit(1).execute()
+        vehicle = inv_result.data[0] if inv_result.data else {}
+        ctx = build_vehicle_context(vehicle) if vehicle else {}
+
+        # Get existing post with sticker text
+        post_result = sb.table("posts").select("base_text,post_id").eq("stock", stock.upper()).limit(1).execute()
+        if not post_result.data or not post_result.data[0].get("base_text"):
+            return {"ok": False, "error": f"Aucun post avec sticker trouve pour {stock}"}
+
+        base_text = post_result.data[0]["base_text"]
+        has_sticker = "ACCESSOIRES" in base_text or "Window Sticker" in base_text
+        if not has_sticker:
+            return {"ok": False, "error": "Ce post ne contient pas de donnees Window Sticker", "is_sticker": False}
+
+        title = vehicle.get("title", "") if vehicle else ""
+        price = vehicle.get("price_int", 0) if vehicle else 0
+        km = vehicle.get("km_int", 0) if vehicle else 0
+        price_fmt = f"{price:,}".replace(",", " ") + " $" if price else ""
+        km_fmt = f"{km:,}".replace(",", " ") + " km" if km else ""
+
+        brand_identity = ctx.get("brand_identity", "") if ctx else ""
+        model_known_for = ctx.get("model_known_for", "") if ctx else ""
+        vtype = ctx.get("vehicle_type", "general") if ctx else "general"
+
+        system_msg = """Tu es Daniel Giroux, vendeur passionne chez Kennebec Dodge Chrysler a Saint-Georges.
+Tu recois une annonce Facebook generee a partir du Window Sticker d'un vehicule Stellantis.
+
+TON TRAVAIL — Humaniser cette annonce en respectant ces regles STRICTES:
+
+1. INTRO (3-4 phrases au debut):
+   Ajoute une intro percutante, quebecoise, passionnee, specifique au vehicule.
+   Pas de cliches, pas de vulgarite. Professionnel mais passionne.
+   ABSOLUMENT AUCUN mot vulgaire, grossier ou a caractere sexuel.
+   JAMAIS de "sillonner", "dominer", "Beauce", "routes de la Beauce" dans l'intro.
+
+2. TITRE:
+   Remplace SEULEMENT la premiere ligne (titre entre emojis) par un titre plus vendeur et humain.
+
+3. OPTIONS — Structure STRICTE:
+   ✅ = OPTIONS PRINCIPALES en MAJUSCULES humanisees (noms techniques traduits en francais lisible)
+   ▫️ = sous-options en minuscules, plus discrets, en retrait
+   
+   IMPORTANT: 
+   - NE SUPPRIME AUCUNE LIGNE. Chaque ✅ et ▫️ doit rester.
+   - Les ✅ restent en MAJUSCULES. Noms humanises.
+   - Les ▫️ sont en minuscules. Noms humanises.
+   
+   Exemples:
+   - "COUCHE NACREE CRISTAL NOIR ETINCEL" → "PEINTURE NOIR CRISTAL NACREE"
+   - "BANQ AVANT 40–20–40 TISSU CAT SUP" → "BANQUETTE AVANT 40/20/40 TISSU PREMIUM"
+   - "SIEGE CONDUCT 10 REGL ELECT A/LOMB" → "siege conducteur 10 reglages electriques avec lombaire"
+   - "SYST ELECTRO ANTIDERAPAGE" → "SYSTEME ANTIPATINAGE ELECTRONIQUE"
+   - "TAPIS PROTECT AVANT/ARR T/S MOPARMD" → "TAPIS PROTECTEURS MOPAR AVANT/ARRIERE"
+   - "ESSIEU ARR A/DIFFERENTIEL AUTOBLOQ" → "ESSIEU ARRIERE DIFFERENTIEL AUTOBLOQUANT"
+   - "PLAQUE PROTECTION BOITE TRANSFERT" → "plaque de protection boite de transfert"
+
+4. TOUT apres le lien sticker (footer echanges, Daniel Giroux, hashtags) = COPIE EXACTE, ne change RIEN.
+
+NE RAJOUTE RIEN a la fin. Pas de commentaire, pas de "INFOS"."""
+
+        prompt = f"""Humanise cette annonce:
+
+{base_text}
+
+INFOS: {title} | {price_fmt} | {km_fmt} | {vtype}
+{f'Marque: {brand_identity}' if brand_identity else ''}
+{f'Modele: {model_known_for}' if model_known_for else ''}"""
+
+        api_key = os.environ.get("EMERGENT_LLM_KEY", "")
+        if not api_key:
+            return {"ok": False, "error": "EMERGENT_LLM_KEY non configure"}
+
+        chat = LlmChat(
+            api_key=api_key,
+            session_id=f"kenbot-sticker-{stock}-{uuid.uuid4().hex[:8]}",
+            system_message=system_msg,
+        )
+        chat.with_model("openai", "gpt-4o")
+        response = await chat.send_message(UserMessage(text=prompt))
+
+        # Couper tout apres les hashtags
+        lines = response.split("\n")
+        output = []
+        for line in lines:
+            output.append(line)
+            if line.strip().startswith("#") and "DanielGiroux" in line:
+                break
+        text = "\n".join(output).strip()
+
+        # Filtre vulgarite
+        vulgar = ["couilles", "balls", "badass", "bitch", "cul ", "merde", "crisse",
+                  "tabarnac", "calisse", "ostie", "fuck", "shit", "damn", "ass ", "sexy"]
+        for v in vulgar:
+            if v in text.lower():
+                text_lines = text.split("\n")
+                text = "\n".join(l for l in text_lines if v not in l.lower())
+
+        return {
+            "ok": True,
+            "text": text,
+            "original": base_text,
+            "intelligence": ctx,
+            "chars": len(text),
+            "is_sticker": True,
+            "model": "gpt-4o",
+        }
+    except Exception as e:
+        import traceback
+        return {"ok": False, "error": str(e), "traceback": traceback.format_exc()}
+
 @api_router.get("/test-batch-generate")
 async def test_batch_generate(limit: int = 3):
     """Teste la generation sur plusieurs vehicules actifs."""

@@ -417,6 +417,7 @@ function TextPreviewTab({ inventory, onSelectStock, selectedStock }) {
   const [result, setResult] = useState(null);
   const [copied, setCopied] = useState(false);
   const [genCount, setGenCount] = useState(0);
+  const [mode, setMode] = useState('generate'); // 'generate' or 'sticker'
 
   const activeVehicles = (inventory || []).filter(v => v.status === 'ACTIVE');
   const filtered = activeVehicles.filter(v => {
@@ -427,13 +428,17 @@ function TextPreviewTab({ inventory, onSelectStock, selectedStock }) {
       || (v.vin || '').toLowerCase().includes(s);
   });
 
-  const handleGenerate = async (stock) => {
+  const handleGenerate = async (stock, useSticker = false) => {
     if (!stock) return;
     setGenerating(true);
     setResult(null);
     setCopied(false);
+    setMode(useSticker ? 'sticker' : 'generate');
     try {
-      const res = await fetch(`${API}/api/generate-text/${stock}`, { method: 'POST' });
+      const endpoint = useSticker
+        ? `${API}/api/humanize-sticker/${stock}`
+        : `${API}/api/generate-text/${stock}`;
+      const res = await fetch(endpoint, { method: 'POST' });
       const data = await res.json();
       setResult(data);
       setGenCount(c => c + 1);
@@ -447,6 +452,7 @@ function TextPreviewTab({ inventory, onSelectStock, selectedStock }) {
     onSelectStock(stock);
     setResult(null);
     setCopied(false);
+    setMode('generate');
   };
 
   const handleCopy = () => {
@@ -462,6 +468,12 @@ function TextPreviewTab({ inventory, onSelectStock, selectedStock }) {
   // Pre-fill basic info from inventory when no AI result yet
   const displayKm = intel.km_formatted || (selectedVehicle?.km_int ? `${selectedVehicle.km_int.toLocaleString()} km` : '—');
   const displayPrice = intel.price_formatted || (selectedVehicle?.price_int ? `${selectedVehicle.price_int.toLocaleString()} $` : '—');
+
+  // Detect Stellantis VINs (start with 1C, 2C, 3C, 1J, 3D, 2A)
+  const vin = (selectedVehicle?.vin || '').toUpperCase();
+  const isStellantis = /^(1C|2C|3C|1J|3D|2A)/.test(vin);
+  const titleLower = (selectedVehicle?.title || '').toLowerCase();
+  const isStellBrand = ['ram', 'dodge', 'jeep', 'chrysler', 'fiat'].some(b => titleLower.startsWith(b));
 
   return (
     <div data-testid="text-preview-tab">
@@ -526,12 +538,22 @@ function TextPreviewTab({ inventory, onSelectStock, selectedStock }) {
                 <div className="tp-actions">
                   <button
                     className="tp-generate-btn"
-                    onClick={() => handleGenerate(selectedStock)}
+                    onClick={() => handleGenerate(selectedStock, false)}
                     disabled={generating}
                     data-testid="tp-generate-btn"
                   >
-                    {generating ? 'GENERATION...' : genCount > 0 && result?.ok ? 'REGENERER' : 'GENERER LE TEXTE'}
+                    {generating && mode === 'generate' ? 'GENERATION...' : 'GENERER TEXTE'}
                   </button>
+                  {(isStellantis || isStellBrand) && (
+                    <button
+                      className="tp-sticker-btn"
+                      onClick={() => handleGenerate(selectedStock, true)}
+                      disabled={generating}
+                      data-testid="tp-sticker-btn"
+                    >
+                      {generating && mode === 'sticker' ? 'HUMANISATION...' : 'HUMANISER STICKER'}
+                    </button>
+                  )}
                   {result?.ok && (
                     <button className="tp-copy-btn" onClick={handleCopy} data-testid="tp-copy-btn">
                       {copied ? 'COPIE !' : 'COPIER'}
@@ -601,10 +623,11 @@ function TextPreviewTab({ inventory, onSelectStock, selectedStock }) {
                 result.ok ? (
                   <div className="tp-text-result" data-testid="tp-text-result">
                     <div className="tp-text-header">
-                      <span className="tp-text-label">Texte Facebook genere</span>
+                      <span className="tp-text-label">{result.is_sticker ? 'Sticker Stellantis humanise' : 'Texte Facebook genere'}</span>
                       <div className="tp-text-meta">
                         <span className="badge badge-ok">{result.chars} chars</span>
-                        <span className="badge badge-info">style: {result.style}</span>
+                        {result.style && <span className="badge badge-info">style: {result.style}</span>}
+                        {result.is_sticker && <span className="badge" style={{background:'#7C3AED',color:'white'}}>STICKER</span>}
                         <span className="badge badge-active">{result.model}</span>
                       </div>
                     </div>
