@@ -37,6 +37,7 @@ RÈGLES ABSOLUES:
 - Tu parles comme un VRAI vendeur qui connaît ses chars. Pas de phrases génériques.
 - JAMAIS de "Prêt à dominer les routes" ou "faire tourner les têtes" — c'est cliché.
 - JAMAIS de "sillonner la Beauce" ou "conquérir les chemins" — c'est du robot.
+- JAMAIS mentionner "la Beauce", "routes de la Beauce" ou "paysages beauceron". On vend des chars, pas du tourisme.
 - Chaque texte doit être UNIQUE. Si tu vends un Challenger, parle du V8. Si c'est un Wrangler, parle du off-road.
 - Le ton est direct, authentique, passionné. Comme si tu parlais à un ami au garage.
 - Tu CONNAIS les véhicules. Tu sais ce qui rend chaque modèle spécial.
@@ -273,6 +274,11 @@ def _post_process(text: str) -> str:
         "dominer les routes",
         "parcourir les routes de beauce",
         "arpenter les routes",
+        "routes de la beauce",
+        "routes de beauce",
+        "chemins de la beauce",
+        "paysages de la beauce",
+        "paysages beauceron",
     ]
     for c in cliches:
         if c in text.lower():

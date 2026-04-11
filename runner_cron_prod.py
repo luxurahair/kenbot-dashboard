@@ -62,6 +62,14 @@ except ImportError:
     humanize_text = None
     generate_intro_only = None
 
+# Import llm_v3 - generation intelligente par vehicule
+try:
+    from llm_v3 import generate_smart_text as generate_smart_text_v3
+    from vehicle_intelligence import build_vehicle_context
+except ImportError:
+    generate_smart_text_v3 = None
+    build_vehicle_context = None
+
 try:
     from meta_compare_supabase import meta_compare as meta_compare_fn
 except Exception:
@@ -476,8 +484,45 @@ def _build_ad_text(
     v_ai["old_price"] = old_price
     v_ai["new_price"] = new_price
 
-    # 1) StickerToAd prioritaire pour Stellantis
+    # Récupérer le texte des options sticker pour Stellantis
+    sticker_options_text = ""
     if USE_STICKER_AD and _is_stellantis_vin(vin):
+        try:
+            res = ensure_sticker_cached(sb, vin, run_id)
+            if (res.get("status") or "").lower() == "ok":
+                pdf_bytes = sb.storage.from_(STICKERS_BUCKET).download(res["path"])
+                options = _extract_options_from_sticker_bytes(pdf_bytes)
+                if options:
+                    # Convertir les options en texte pour llm_v3
+                    opt_lines = []
+                    for grp in options:
+                        opt_lines.append(grp.get("title", ""))
+                        for d in grp.get("details", []):
+                            opt_lines.append(f"  - {d}")
+                    sticker_options_text = "\n".join(opt_lines)
+        except Exception as e:
+            print(f"[STICKER FETCH] slug={slug} vin={vin} err={e}", flush=True)
+
+    # ── PRIORITE 1 : llm_v3 (génération intelligente complète) ──
+    if USE_AI and generate_smart_text_v3 is not None:
+        try:
+            smart_text = generate_smart_text_v3(
+                vehicle=v_ai,
+                event=event,
+                options_text=sticker_options_text,
+                old_price=old_price,
+                new_price=new_price,
+            )
+            if smart_text and len(smart_text) >= MIN_POST_TEXT_LEN:
+                print(f"[LLM_V3 OK] slug={slug} stock={stock} event={event} chars={len(smart_text)}", flush=True)
+                return _ensure_contact_footer(smart_text)
+            elif smart_text:
+                print(f"[LLM_V3 SHORT] slug={slug} chars={len(smart_text)} < min={MIN_POST_TEXT_LEN}, fallback", flush=True)
+        except Exception as e:
+            print(f"[LLM_V3 FAIL] slug={slug} stock={stock} err={e}, fallback", flush=True)
+
+    # ── PRIORITE 2 : StickerToAd pour Stellantis (ancien pipeline) ──
+    if sticker_options_text and USE_STICKER_AD and _is_stellantis_vin(vin):
         try:
             res = ensure_sticker_cached(sb, vin, run_id)
             if (res.get("status") or "").lower() == "ok":
@@ -494,7 +539,7 @@ def _build_ad_text(
                         vehicle_url=url,
                     )
 
-                    # AI pour NEW et PRICE_CHANGED
+                    # AI intro (ancien llm.py)
                     txt = _maybe_add_ai_intro(v_ai, txt)
 
                     # Hook promo spécial baisse de prix
@@ -508,7 +553,7 @@ def _build_ad_text(
         except Exception as e:
             print(f"[STICKER_TO_AD FAIL] slug={slug} vin={vin} err={e}", flush=True)
 
-    # 2) Fallback text engine
+    # ── PRIORITE 3 : Fallback text engine externe ──
     payload = dict(v or {})
     payload.update(
         {
@@ -533,7 +578,7 @@ def _build_ad_text(
     txt = generate_facebook_text(TEXT_ENGINE_URL, slug, event, payload)
     txt = (txt or "").strip()
 
-    # AI pour NEW et PRICE_CHANGED
+    # AI intro (ancien llm.py) pour enrichir le texte du text engine
     txt = _maybe_add_ai_intro(v_ai, txt)
 
     # Hook promo spécial baisse de prix

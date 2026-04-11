@@ -39,9 +39,24 @@
 - Audit complet: 30 variables mappees, 9 orphelines, ~20 absentes de Render (avec defaults), 4 divergences non bloquantes
 - Rapport detaille genere -> AUDIT_ENV_VARIABLES.md
 
+### Session 5 - Test Generation IA sur Vrais Vehicules + Integration Runner
+- Endpoint /api/generate-text/{stock} recrit avec emergentintegrations (GPT-4o)
+- 5 vehicules reels testes avec succes:
+  - Ford Mustang GT: V8 Coyote 450HP detecte, ton muscle car
+  - Jeep Wrangler Rubicon 4XE: type off_road, hybride rechargeable
+  - Chevrolet Malibu LT: type general, ton fiabilite/valeur
+  - Honda Civic EX: type general, ton economie
+  - Jeep Grand Cherokee Summit: type suv_premium, ton luxe
+- Filtre anti-cliches ameliore (ajout "routes de la Beauce" etc.)
+- Endpoint /api/test-batch-generate ajoute pour tester le parsing en batch
+- **llm_v3 integre dans runner_cron_prod.py**:
+  - Priorite 1: generate_smart_text_v3 (nouveau moteur IA)
+  - Priorite 2: sticker_to_ad (ancien pipeline Stellantis)
+  - Priorite 3: text_engine externe (fallback)
+  - Options sticker passees a llm_v3 pour enrichir le texte IA
+
 ## Backlog
-- P0: Integrer llm_v3 dans runner_cron_prod.py (remplacer l'ancien llm.py)
-- P0: Tester la generation avec la cle OpenAI sur les vrais vehicules
+- P0: Tester la generation sur Render (push via Save to GitHub puis verifier les logs du prochain cron)
 - P1: Ajouter un onglet "Preview Texte" dans le dashboard
 - P1: Enrichir la base de connaissance (plus de modeles)
 - P1: Implementer les 9 variables Render orphelines dans le code (ou les retirer)

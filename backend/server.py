@@ -70,6 +70,31 @@ def sb_query(table, select="*", filters=None, order=None, limit=None, count=Fals
 # ─── Changelog ───
 CHANGELOG = [
     {
+        "version": "3.0.0",
+        "date": "2026-04-11",
+        "type": "feature",
+        "title": "AI v3.0 — Generation intelligente par vehicule",
+        "changes": [
+            {"severity": "critical", "description": "Nouveau moteur de texte llm_v3.py: prompts adaptes par type de vehicule (muscle_car, off_road, suv_premium, pickup, etc.)", "file": "llm_v3.py"},
+            {"severity": "critical", "description": "Module vehicle_intelligence.py: parsing titre, detection marque/modele/trim, specs moteur (HP, engine), base 20+ marques", "file": "vehicle_intelligence.py"},
+            {"severity": "medium", "description": "5 styles d'intro aleatoires (direct, storytelling, question, expertise, opportunite)", "file": "llm_v3.py"},
+            {"severity": "medium", "description": "Filtre anti-cliches ameliore: 'routes de la Beauce', 'paysages beauceron' etc.", "file": "llm_v3.py"},
+            {"severity": "low", "description": "Teste avec succes sur 5 vrais vehicules: Mustang GT (V8 450HP), Wrangler Rubicon 4XE, Malibu LT, Civic EX, Grand Cherokee Summit", "file": "server.py"},
+            {"severity": "critical", "description": "llm_v3 integre dans runner_cron_prod.py: Priorite 1 = llm_v3, Priorite 2 = sticker_to_ad, Priorite 3 = text_engine", "file": "runner_cron_prod.py"},
+        ]
+    },
+    {
+        "version": "2.2.0",
+        "date": "2026-04-11",
+        "type": "feature",
+        "title": "Audit Variables Environnement Render vs Code",
+        "changes": [
+            {"severity": "medium", "description": "30 variables Render correctement mappees au code", "file": "AUDIT_ENV_VARIABLES.md"},
+            {"severity": "medium", "description": "9 variables Render orphelines identifiees (jamais lues par le code)", "file": "AUDIT_ENV_VARIABLES.md"},
+            {"severity": "low", "description": "~20 variables du code absentes de Render (avec bons defaults)", "file": "AUDIT_ENV_VARIABLES.md"},
+        ]
+    },
+    {
         "version": "2.1.0",
         "date": "2026-04-11",
         "type": "bugfix",
@@ -313,37 +338,182 @@ async def get_vehicle_intelligence(stock: str):
         return {"error": str(e)}
 
 @api_router.post("/generate-text/{stock}")
-async def generate_text_for_vehicle(stock: str):
-    """Génère un texte Facebook intelligent pour un véhicule."""
+async def generate_text_for_vehicle(stock: str, event: str = "NEW"):
+    """Génère un texte Facebook intelligent pour un véhicule via Emergent LLM."""
     if not sb:
         return {"ok": False, "error": "Supabase non connecte"}
     try:
-        from vehicle_intelligence import build_vehicle_context
-        from llm_v3 import generate_smart_text
+        from vehicle_intelligence import build_vehicle_context, humanize_options
+        from emergentintegrations.llm.chat import LlmChat, UserMessage
 
         result = sb.table("inventory").select("*").eq("stock", stock.upper()).limit(1).execute()
         if not result.data:
             return {"ok": False, "error": f"Vehicule {stock} non trouve"}
         vehicle = result.data[0]
+        ctx = build_vehicle_context(vehicle)
 
         # Get sticker options if available
         options_text = ""
-        post = sb.table("posts").select("base_text").eq("stock", stock.upper()).limit(1).execute()
-        if post.data and post.data[0].get("base_text"):
-            bt = post.data[0]["base_text"]
-            # Extraire la section options du texte existant
+        post_result = sb.table("posts").select("base_text").eq("stock", stock.upper()).limit(1).execute()
+        if post_result.data and post_result.data[0].get("base_text"):
+            bt = post_result.data[0]["base_text"]
             if "ACCESSOIRES" in bt or "QUIPEMENTS" in bt:
                 options_text = bt
 
-        text = generate_smart_text(vehicle, event="NEW", options_text=options_text)
-        ctx = build_vehicle_context(vehicle)
+        human_options = humanize_options(options_text) if options_text else []
 
-        if text:
-            return {"ok": True, "text": text, "intelligence": ctx, "chars": len(text)}
-        else:
-            return {"ok": False, "error": "Generation echouee - verifiez OPENAI_API_KEY", "intelligence": ctx}
+        # Build specs info
+        specs_info = []
+        if ctx.get("hp"):
+            specs_info.append(f"Moteur: {ctx['engine']} — {ctx['hp']} chevaux")
+        elif ctx.get("engine"):
+            specs_info.append(f"Moteur: {ctx['engine']}")
+        if ctx.get("trim_vibe"):
+            specs_info.append(f"Ce trim: {ctx['trim_vibe']}")
+        if ctx.get("model_known_for"):
+            specs_info.append(f"Ce modele est connu pour: {ctx['model_known_for']}")
+        if ctx.get("brand_identity"):
+            specs_info.append(f"La marque {ctx['brand'].capitalize()}: {ctx['brand_identity']}")
+
+        vtype = ctx.get("vehicle_type", "general")
+        tone_map = {
+            "muscle_car": "adrenaline et son du moteur",
+            "pickup": "robustesse et capacite",
+            "pickup_hd": "robustesse et capacite",
+            "off_road": "aventure et liberte",
+            "suv_premium": "confort et raffinement",
+            "citadine": "style et economie",
+            "suv_compact": "style et economie",
+            "exotique": "exclusivite et reve",
+            "collector": "exclusivite et reve",
+        }
+        tone = tone_map.get(vtype, "polyvalence et fiabilite")
+
+        import random
+        styles = ["direct", "storytelling", "question", "expertise", "opportunite"]
+        style = random.choice(styles)
+
+        system_msg = """Tu es Daniel Giroux, vendeur passionne chez Kennebec Dodge Chrysler a Saint-Georges en Beauce.
+Tu ecris des annonces Facebook pour des vehicules d'occasion.
+
+REGLES ABSOLUES:
+- Tu ecris en francais quebecois naturel. Pas de francais de France. Pas de robot.
+- Tu parles comme un VRAI vendeur qui connait ses chars. Pas de phrases generiques.
+- JAMAIS de "Pret a dominer les routes" ou "faire tourner les tetes" — c'est cliche.
+- JAMAIS de "sillonner la Beauce" ou "conquerir les chemins" — c'est du robot.
+- JAMAIS mentionner "la Beauce", "routes de la Beauce" ou "paysages beauceron". On vend des chars, pas du tourisme.
+- Chaque texte doit etre UNIQUE. Si tu vends un Challenger, parle du V8. Si c'est un Wrangler, parle du off-road.
+- Le ton est direct, authentique, passionne. Comme si tu parlais a un ami au garage.
+- Tu CONNAIS les vehicules. Tu sais ce qui rend chaque modele special.
+- Maximum 3-4 phrases pour l'intro. Pas de roman.
+- Pas de hashtags dans l'intro.
+- Pas d'emojis dans l'intro (ils viennent apres dans le corps de l'annonce)."""
+
+        user_prompt = f"""Ecris une annonce Facebook pour ce vehicule:
+
+VEHICULE: {ctx.get('title', '')}
+PRIX: {ctx.get('price_formatted', '')}
+KILOMETRAGE: {ctx.get('km_formatted', '')} ({ctx.get('km_description', '')})
+POSITIONNEMENT PRIX: {ctx.get('price_description', '')}
+TYPE: {vtype}
+
+CONNAISSANCES SPECIFIQUES:
+{chr(10).join(specs_info) if specs_info else "Aucune info specifique disponible."}
+
+OPTIONS/EQUIPEMENTS CONFIRMES:
+{chr(10).join(f"- {o}" for o in human_options) if human_options else "Aucune option confirmee."}
+
+ANGLES DE VENTE SUGGERES: {', '.join(ctx.get('brand_angles', ['qualite', 'valeur', 'confiance'])[:3])}
+
+INSTRUCTIONS:
+1. Ecris une INTRO de 3-4 phrases maximum. Naturelle, directe, passionnee.
+   - Mentionne ce qui rend CE vehicule special (pas une intro generique)
+   - Si tu connais le moteur/HP, mentionne-le naturellement
+   - Adapte le ton au type: {tone}
+
+2. Puis le CORPS structure:
+   - Titre avec le nom complet et l'annee
+   - Prix
+   - Kilometrage
+   - Stock: {ctx.get('stock', '')}
+   - 5-8 equipements/caracteristiques en points
+   - Si c'est un Stellantis avec sticker: mention "Window Sticker verifie"
+
+3. FERME avec: le nom Daniel Giroux et le numero 418-222-3939.
+   Ne mets PAS "Kennebec Dodge" dans le footer (il est ajoute automatiquement).
+
+FORMAT DE SORTIE: Texte pret a copier-coller sur Facebook. Utilise des emojis avec parcimonie dans le corps (pas dans l'intro).
+
+STYLE D'INTRO: {style}"""
+
+        api_key = os.environ.get("EMERGENT_LLM_KEY", "")
+        if not api_key:
+            return {"ok": False, "error": "EMERGENT_LLM_KEY non configure", "intelligence": ctx}
+
+        chat = LlmChat(
+            api_key=api_key,
+            session_id=f"kenbot-gen-{stock}-{uuid.uuid4().hex[:8]}",
+            system_message=system_msg,
+        )
+        chat.with_model("openai", "gpt-4o")
+
+        response = await chat.send_message(UserMessage(text=user_prompt))
+        text = response.strip().strip('"').strip("'")
+
+        # Post-process: remove cliches
+        cliches = ["pret a dominer", "faire tourner les tetes", "sillonner la beauce",
+                    "conquerir les chemins", "dominer les routes", "parcourir les routes de beauce",
+                    "arpenter les routes", "routes de la beauce", "routes de beauce",
+                    "chemins de la beauce", "paysages de la beauce"]
+        for c in cliches:
+            if c in text.lower():
+                lines = text.split("\n")
+                text = "\n".join(l for l in lines if c not in l.lower())
+
+        return {
+            "ok": True,
+            "text": text.strip(),
+            "intelligence": ctx,
+            "chars": len(text),
+            "style": style,
+            "model": "gpt-4o",
+        }
     except Exception as e:
-        return {"ok": False, "error": str(e)}
+        import traceback
+        return {"ok": False, "error": str(e), "traceback": traceback.format_exc()}
+
+@api_router.get("/test-batch-generate")
+async def test_batch_generate(limit: int = 3):
+    """Teste la generation sur plusieurs vehicules actifs."""
+    if not sb:
+        return {"ok": False, "error": "Supabase non connecte"}
+    inv = sb.table("inventory").select("stock,title,price_int,km_int").eq("status", "ACTIVE").order("updated_at", desc=True).limit(limit).execute()
+    if not inv.data:
+        return {"ok": False, "error": "Aucun vehicule actif"}
+    results = []
+    for v in inv.data:
+        stock = v.get("stock", "")
+        try:
+            from vehicle_intelligence import build_vehicle_context
+            ctx = build_vehicle_context(v)
+            results.append({
+                "stock": stock,
+                "title": v.get("title", ""),
+                "parsing": {
+                    "brand": ctx["brand"],
+                    "model": ctx["model"],
+                    "trim": ctx["trim"],
+                    "type": ctx["vehicle_type"],
+                    "hp": ctx["hp"],
+                    "engine": ctx["engine"],
+                    "vibe": ctx["trim_vibe"],
+                    "km_desc": ctx["km_description"],
+                    "price_desc": ctx["price_description"],
+                },
+            })
+        except Exception as e:
+            results.append({"stock": stock, "error": str(e)})
+    return {"ok": True, "count": len(results), "vehicles": results}
 
 @api_router.get("/architecture")
 async def get_architecture():
