@@ -68,7 +68,16 @@
   - vin_decoder.py: module de decodage VIN (API NHTSA gratuite, cache memoire)
   - Enrichit automatiquement vehicle_intelligence quand les specs manquent
   - Tags visuels dans le dashboard: 4WD, Automatic, Hybrid, places, securite
-- Tests: 27/27 backend + 100% frontend (iteration_3.json)
+### Session 7 - Integration VIN NHTSA + Humanisation Sticker dans Runner
+- vin_decoder.py integre dans runner_cron_prod.py (decodage VIN pour TOUS les vehicules)
+- _humanize_sticker_text() ajoutee: humanise les annonces Stellantis via OpenAI
+- llm_v3.py enrichi: utilise les specs VIN NHTSA automatiquement
+- Nouveau flux _build_ad_text:
+  1. Decodage VIN NHTSA (tous vehicules)
+  2. P1: Stellantis sticker → humanisation IA (intro + titre + ✅ MAJ + ▫️ min)
+  3. P2: llm_v3 + VIN (generation intelligente)
+  4. P3: Sticker brut + intro (fallback)
+  5. P4: Text engine externe (dernier recours)
 
 ## Backlog
 - P0: Push sur GitHub via "Save to Github" pour deployer llm_v3 sur Render

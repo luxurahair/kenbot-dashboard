@@ -70,6 +70,13 @@ except ImportError:
     generate_smart_text_v3 = None
     build_vehicle_context = None
 
+# Import vin_decoder - decodage VIN via NHTSA
+try:
+    from vin_decoder import decode_vin, format_specs_for_prompt
+except ImportError:
+    decode_vin = None
+    format_specs_for_prompt = None
+
 try:
     from meta_compare_supabase import meta_compare as meta_compare_fn
 except Exception:
@@ -463,6 +470,112 @@ def _price_changed_intro_variant2(title: str, old_price: Any, new_price: Any) ->
     )
 
 
+def _humanize_sticker_text(
+    raw_text: str,
+    v: Dict[str, Any],
+    event: str,
+    vin_specs_text: str = "",
+) -> str:
+    """
+    Humanise un texte sticker_to_ad brut via OpenAI.
+    - Ajoute une intro humaine 3-4 phrases
+    - Humanise le titre
+    - Traduit les noms d'options techniques en français lisible
+    - ✅ OPTIONS en MAJUSCULES, ▫️ sous-options en minuscules
+    - Conserve TOUT le footer, lien sticker, hashtags
+    """
+    api_key = os.getenv("OPENAI_API_KEY", "").strip()
+    if not api_key:
+        return ""
+
+    try:
+        from openai import OpenAI
+        client = OpenAI(api_key=api_key)
+    except Exception:
+        return ""
+
+    title = (v.get("title") or "").strip()
+    stock = (v.get("stock") or "").strip().upper()
+
+    # Construire le contexte véhicule
+    ctx_info = ""
+    if build_vehicle_context is not None:
+        try:
+            ctx = build_vehicle_context(v)
+            parts = []
+            if ctx.get("brand_identity"):
+                parts.append(f"Marque: {ctx['brand_identity']}")
+            if ctx.get("model_known_for"):
+                parts.append(f"Modele: {ctx['model_known_for']}")
+            if ctx.get("vehicle_type"):
+                parts.append(f"Type: {ctx['vehicle_type']}")
+            ctx_info = "\n".join(parts)
+        except Exception:
+            pass
+
+    system_msg = (
+        "Tu es Daniel Giroux, vendeur passionne chez Kennebec Dodge Chrysler a Saint-Georges.\n"
+        "Tu recois une annonce Facebook generee a partir du Window Sticker d'un vehicule Stellantis.\n\n"
+        "TON TRAVAIL — Humaniser cette annonce en respectant ces regles STRICTES:\n\n"
+        "1. INTRO (3-4 phrases au debut):\n"
+        "   Ajoute une intro percutante, quebecoise, passionnee, specifique au vehicule.\n"
+        "   Pas de cliches, pas de vulgarite. Professionnel mais passionne.\n"
+        "   ABSOLUMENT AUCUN mot vulgaire, grossier ou a caractere sexuel.\n"
+        "   JAMAIS de 'sillonner', 'dominer', 'Beauce', 'routes de la Beauce' dans l'intro.\n\n"
+        "2. TITRE:\n"
+        "   Remplace SEULEMENT la premiere ligne (titre entre emojis) par un titre plus vendeur.\n\n"
+        "3. OPTIONS — Structure STRICTE:\n"
+        "   ✅ = OPTIONS PRINCIPALES en MAJUSCULES humanisees\n"
+        "   ▫️ = sous-options en minuscules, en retrait\n"
+        "   NE SUPPRIME AUCUNE LIGNE. Chaque ✅ et ▫️ doit rester.\n"
+        "   Traduis les noms techniques en francais lisible.\n\n"
+        "4. TOUT apres le lien sticker (footer, Daniel Giroux, hashtags) = COPIE EXACTE.\n\n"
+        "NE RAJOUTE RIEN a la fin."
+    )
+
+    user_prompt = f"Humanise cette annonce:\n\n{raw_text}"
+    if ctx_info:
+        user_prompt += f"\n\nINFOS VEHICULE:\n{ctx_info}"
+    if vin_specs_text:
+        user_prompt += f"\n\nSPECS VIN (NHTSA):\n{vin_specs_text}"
+
+    try:
+        response = client.chat.completions.create(
+            model="gpt-4o",
+            messages=[
+                {"role": "system", "content": system_msg},
+                {"role": "user", "content": user_prompt},
+            ],
+            temperature=0.8,
+            max_tokens=2000,
+        )
+        text = response.choices[0].message.content.strip()
+
+        # Couper tout après les hashtags si l'IA a rajouté du texte
+        lines = text.split("\n")
+        output = []
+        for line in lines:
+            output.append(line)
+            if line.strip().startswith("#") and "DanielGiroux" in line:
+                break
+        text = "\n".join(output).strip()
+
+        # Filtre anti-vulgarité
+        vulgar = ["couilles", "balls", "badass", "bitch", "cul ", "merde",
+                  "crisse", "tabarnac", "calisse", "ostie", "fuck", "shit"]
+        for vw in vulgar:
+            if vw in text.lower():
+                text_lines = text.split("\n")
+                text = "\n".join(l for l in text_lines if vw not in l.lower())
+
+        return text.strip()
+
+    except Exception as e:
+        print(f"[HUMANIZE_STICKER ERROR] stock={stock} err={e}", flush=True)
+        return ""
+
+
+
 def _build_ad_text(
     sb,
     run_id: str,
@@ -484,7 +597,20 @@ def _build_ad_text(
     v_ai["old_price"] = old_price
     v_ai["new_price"] = new_price
 
-    # Récupérer le texte des options sticker pour Stellantis
+    # ── Décodage VIN via NHTSA (pour tous les véhicules) ──
+    vin_specs_text = ""
+    if decode_vin is not None and len(vin) >= 11:
+        try:
+            vin_specs = decode_vin(vin)
+            if vin_specs and format_specs_for_prompt is not None:
+                vin_specs_text = format_specs_for_prompt(vin_specs)
+                if vin_specs_text:
+                    print(f"[VIN_DECODE OK] slug={slug} vin={vin} specs={len(vin_specs_text)} chars", flush=True)
+        except Exception as e:
+            print(f"[VIN_DECODE FAIL] slug={slug} vin={vin} err={e}", flush=True)
+
+    # ── Récupérer le texte des options sticker pour Stellantis ──
+    sticker_raw_text = ""
     sticker_options_text = ""
     if USE_STICKER_AD and _is_stellantis_vin(vin):
         try:
@@ -493,19 +619,64 @@ def _build_ad_text(
                 pdf_bytes = sb.storage.from_(STICKERS_BUCKET).download(res["path"])
                 options = _extract_options_from_sticker_bytes(pdf_bytes)
                 if options:
-                    # Convertir les options en texte pour llm_v3
+                    # Texte structuré pour llm_v3
                     opt_lines = []
                     for grp in options:
                         opt_lines.append(grp.get("title", ""))
                         for d in grp.get("details", []):
                             opt_lines.append(f"  - {d}")
                     sticker_options_text = "\n".join(opt_lines)
+
+                    # Texte brut complet via build_ad_from_options (pour humanisation)
+                    sticker_raw_text = build_ad_from_options(
+                        title=title,
+                        price=price,
+                        mileage=mileage,
+                        stock=stock,
+                        vin=vin,
+                        options=options,
+                        vehicle_url=url,
+                    )
         except Exception as e:
             print(f"[STICKER FETCH] slug={slug} vin={vin} err={e}", flush=True)
 
-    # ── PRIORITE 1 : llm_v3 (génération intelligente complète) ──
+    # ══════════════════════════════════════════════════════════════
+    # PRIORITE 1 : Stellantis avec sticker → humanisation IA
+    # ══════════════════════════════════════════════════════════════
+    if USE_AI and sticker_raw_text and generate_smart_text_v3 is not None:
+        try:
+            # Ajouter le footer au texte brut avant humanisation
+            raw_with_footer = _ensure_contact_footer(sticker_raw_text)
+
+            # Humaniser le texte sticker complet via llm_v3
+            humanized = _humanize_sticker_text(
+                raw_with_footer, v_ai, event, vin_specs_text
+            )
+            if humanized and len(humanized) >= MIN_POST_TEXT_LEN:
+                print(f"[STICKER+AI OK] slug={slug} stock={stock} chars={len(humanized)}", flush=True)
+                return humanized
+            elif humanized:
+                print(f"[STICKER+AI SHORT] slug={slug} chars={len(humanized)}, fallback raw sticker", flush=True)
+        except Exception as e:
+            print(f"[STICKER+AI FAIL] slug={slug} err={e}, fallback", flush=True)
+
+        # Fallback: sticker brut + ancienne intro AI
+        txt = _maybe_add_ai_intro(v_ai, sticker_raw_text)
+        if event == "PRICE_CHANGED":
+            intro = _price_changed_intro_variant2(title, old_price, new_price)
+            if intro:
+                txt = intro + "\n\n" + txt
+        return _ensure_contact_footer(txt)
+
+    # ══════════════════════════════════════════════════════════════
+    # PRIORITE 2 : llm_v3 (génération intelligente avec VIN)
+    # ══════════════════════════════════════════════════════════════
     if USE_AI and generate_smart_text_v3 is not None:
         try:
+            # Enrichir le vehicule avec les specs VIN pour le prompt
+            if vin_specs_text:
+                v_ai["_vin_specs_text"] = vin_specs_text
+
             smart_text = generate_smart_text_v3(
                 vehicle=v_ai,
                 event=event,
@@ -521,39 +692,20 @@ def _build_ad_text(
         except Exception as e:
             print(f"[LLM_V3 FAIL] slug={slug} stock={stock} err={e}, fallback", flush=True)
 
-    # ── PRIORITE 2 : StickerToAd pour Stellantis (ancien pipeline) ──
-    if sticker_options_text and USE_STICKER_AD and _is_stellantis_vin(vin):
-        try:
-            res = ensure_sticker_cached(sb, vin, run_id)
-            if (res.get("status") or "").lower() == "ok":
-                pdf_bytes = sb.storage.from_(STICKERS_BUCKET).download(res["path"])
-                options = _extract_options_from_sticker_bytes(pdf_bytes)
-                if options:
-                    txt = build_ad_from_options(
-                        title=title,
-                        price=price,
-                        mileage=mileage,
-                        stock=stock,
-                        vin=vin,
-                        options=options,
-                        vehicle_url=url,
-                    )
+    # ══════════════════════════════════════════════════════════════
+    # PRIORITE 3 : StickerToAd brut (ancien pipeline sans AI)
+    # ══════════════════════════════════════════════════════════════
+    if sticker_raw_text:
+        txt = _maybe_add_ai_intro(v_ai, sticker_raw_text)
+        if event == "PRICE_CHANGED":
+            intro = _price_changed_intro_variant2(title, old_price, new_price)
+            if intro:
+                txt = intro + "\n\n" + txt
+        return _ensure_contact_footer(txt)
 
-                    # AI intro (ancien llm.py)
-                    txt = _maybe_add_ai_intro(v_ai, txt)
-
-                    # Hook promo spécial baisse de prix
-                    if event == "PRICE_CHANGED":
-                        intro = _price_changed_intro_variant2(title, old_price, new_price)
-                        if intro:
-                            txt = intro + "\n\n" + txt
-
-                    return _ensure_contact_footer(txt)
-
-        except Exception as e:
-            print(f"[STICKER_TO_AD FAIL] slug={slug} vin={vin} err={e}", flush=True)
-
-    # ── PRIORITE 3 : Fallback text engine externe ──
+    # ══════════════════════════════════════════════════════════════
+    # PRIORITE 4 : Fallback text engine externe
+    # ══════════════════════════════════════════════════════════════
     payload = dict(v or {})
     payload.update(
         {

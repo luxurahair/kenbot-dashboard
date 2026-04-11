@@ -179,11 +179,29 @@ def generate_smart_text(
     if new_price:
         ctx["new_price"] = f"{int(new_price):,}".replace(",", " ") + " $"
 
+    # Enrichir avec les specs VIN NHTSA si disponibles
+    vin_specs_text = vehicle.get("_vin_specs_text", "")
+    if not vin_specs_text:
+        try:
+            from vin_decoder import decode_vin, format_specs_for_prompt, format_engine_line
+            vin_val = (vehicle.get("vin") or "").strip().upper()
+            if len(vin_val) >= 11:
+                specs = decode_vin(vin_val)
+                if specs:
+                    vin_specs_text = format_specs_for_prompt(specs)
+                    if not ctx.get("hp") and specs.get("engine_hp"):
+                        ctx["hp"] = specs["engine_hp"]
+                        ctx["engine"] = format_engine_line(specs).replace(f" — {specs['engine_hp']} HP", "")
+        except Exception:
+            pass
+
     # Choisir un style d'intro aléatoire
     style = random.choice(INTRO_STYLES)
 
     # Construire le prompt
     prompt = _build_prompt_for_vehicle(ctx, event, options_text)
+    if vin_specs_text:
+        prompt += f"\n\nSPECS DECODEES DU VIN (NHTSA):\n{vin_specs_text}"
     prompt += f"\n\nSTYLE D'INTRO: {style}"
 
     try:
