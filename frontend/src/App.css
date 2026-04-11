@@ -665,6 +665,45 @@ tr:hover td { background: var(--surface-secondary); }
 .tp-type-commercial { background: var(--surface-secondary); color: var(--text-secondary); border: 1px solid var(--border); }
 .tp-type-general { background: var(--surface-secondary); color: var(--text-primary); border: 1px solid var(--border); }
 
+/* VIN NHTSA specs */
+.tp-vin-specs {
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--border);
+}
+.tp-vin-specs-title {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 0.6rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-secondary);
+  margin-bottom: 0.5rem;
+}
+.tp-vin-specs-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+.tp-vin-tag {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 0.68rem;
+  padding: 2px 8px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text-primary);
+}
+.tp-vin-elec {
+  background: #E8F5E9;
+  border-color: #2E7D32;
+  color: #2E7D32;
+}
+.tp-vin-safety {
+  background: var(--accent-blue-subtle);
+  border-color: var(--accent-blue);
+  color: var(--accent-blue);
+  font-size: 0.62rem;
+}
+
 /* Loading bar */
 .tp-loading {
   padding: 2rem 1.5rem;

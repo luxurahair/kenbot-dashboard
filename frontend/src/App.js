@@ -565,7 +565,7 @@ function TextPreviewTab({ inventory, onSelectStock, selectedStock }) {
               {/* Intelligence panel */}
               {(result?.intelligence || selectedVehicle) && (
                 <div className="tp-intel" data-testid="tp-intel-panel">
-                  <div className="tp-intel-title">Intelligence Vehicule</div>
+                  <div className="tp-intel-title">Intelligence Vehicule {result?.vin_specs ? '+ VIN NHTSA' : ''}</div>
                   <div className="tp-intel-grid">
                     <div className="tp-intel-item">
                       <span className="tp-il">Marque</span>
@@ -588,7 +588,7 @@ function TextPreviewTab({ inventory, onSelectStock, selectedStock }) {
                       </span>
                     </div>
                     {intel.hp && (
-                      <div className="tp-intel-item">
+                      <div className="tp-intel-item tp-intel-wide">
                         <span className="tp-il">Moteur</span>
                         <span className="tp-iv tp-engine">{intel.engine} — {intel.hp} HP</span>
                       </div>
@@ -608,6 +608,27 @@ function TextPreviewTab({ inventory, onSelectStock, selectedStock }) {
                       <span className="tp-iv">{displayPrice} {intel.price_description && <span className="tp-desc">({intel.price_description})</span>}</span>
                     </div>
                   </div>
+                  {/* VIN NHTSA Specs */}
+                  {result?.vin_specs && (
+                    <div className="tp-vin-specs" data-testid="tp-vin-specs">
+                      <div className="tp-vin-specs-title">Specs VIN (NHTSA)</div>
+                      <div className="tp-vin-specs-grid">
+                        {result.vin_specs.drive_type && <div className="tp-vin-tag">{result.vin_specs.drive_type}</div>}
+                        {result.vin_specs.transmission && <div className="tp-vin-tag">{result.vin_specs.transmission}{result.vin_specs.transmission_speeds ? ` ${result.vin_specs.transmission_speeds}v` : ''}</div>}
+                        {result.vin_specs.fuel_primary && <div className="tp-vin-tag">{result.vin_specs.fuel_primary}</div>}
+                        {result.vin_specs.electrification && <div className="tp-vin-tag tp-vin-elec">{result.vin_specs.electrification}</div>}
+                        {result.vin_specs.seats && <div className="tp-vin-tag">{result.vin_specs.seats} places{result.vin_specs.seat_rows > 2 ? `, ${result.vin_specs.seat_rows} rangees` : ''}</div>}
+                        {result.vin_specs.plant_country && <div className="tp-vin-tag">{result.vin_specs.plant_country}</div>}
+                        {result.vin_specs.adaptive_cruise === 'Standard' && <div className="tp-vin-tag tp-vin-safety">Cruise adaptatif</div>}
+                        {result.vin_specs.auto_braking === 'Standard' && <div className="tp-vin-tag tp-vin-safety">Freinage auto</div>}
+                        {result.vin_specs.blind_spot === 'Standard' && <div className="tp-vin-tag tp-vin-safety">Angle mort</div>}
+                        {result.vin_specs.lane_keeping === 'Standard' && <div className="tp-vin-tag tp-vin-safety">Maintien voie</div>}
+                        {result.vin_specs.backup_camera === 'Standard' && <div className="tp-vin-tag tp-vin-safety">Camera recul</div>}
+                        {result.vin_specs.headlamp_type?.includes('LED') && <div className="tp-vin-tag">Phares LED</div>}
+                        {result.vin_specs.keyless === 'Standard' && <div className="tp-vin-tag">Sans cle</div>}
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
 

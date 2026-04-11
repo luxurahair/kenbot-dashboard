@@ -352,6 +352,25 @@ async def generate_text_for_vehicle(stock: str, event: str = "NEW"):
         vehicle = result.data[0]
         ctx = build_vehicle_context(vehicle)
 
+        # Decode VIN via NHTSA pour enrichir les specs
+        vin_specs = None
+        vin_specs_text = ""
+        vin_val = (vehicle.get("vin") or "").strip()
+        if len(vin_val) >= 11:
+            try:
+                from vin_decoder import decode_vin, format_specs_for_prompt, format_engine_line
+                vin_specs = decode_vin(vin_val)
+                if vin_specs:
+                    vin_specs_text = format_specs_for_prompt(vin_specs)
+                    # Enrichir le ctx avec les specs NHTSA si vehicle_intelligence n'a pas trouve
+                    if not ctx.get("hp") and vin_specs.get("engine_hp"):
+                        ctx["hp"] = vin_specs["engine_hp"]
+                        eng = format_engine_line(vin_specs)
+                        # Eviter "340 HP" en double dans l'affichage
+                        ctx["engine"] = eng.replace(f" — {vin_specs['engine_hp']} HP", "")
+            except Exception as e:
+                print(f"[VIN_DECODE] {vin_val}: {e}")
+
         # Get sticker options if available
         options_text = ""
         post_result = sb.table("posts").select("base_text").eq("stock", stock.upper()).limit(1).execute()
@@ -362,12 +381,14 @@ async def generate_text_for_vehicle(stock: str, event: str = "NEW"):
 
         human_options = humanize_options(options_text) if options_text else []
 
-        # Build specs info
+        # Build specs info (avoid duplication with vin_specs_text)
         specs_info = []
-        if ctx.get("hp"):
-            specs_info.append(f"Moteur: {ctx['engine']} — {ctx['hp']} chevaux")
-        elif ctx.get("engine"):
-            specs_info.append(f"Moteur: {ctx['engine']}")
+        if not vin_specs_text:
+            # Only add from vehicle_intelligence if we don't have NHTSA data
+            if ctx.get("hp"):
+                specs_info.append(f"Moteur: {ctx['engine']} — {ctx['hp']} chevaux")
+            elif ctx.get("engine"):
+                specs_info.append(f"Moteur: {ctx['engine']}")
         if ctx.get("trim_vibe"):
             specs_info.append(f"Ce trim: {ctx['trim_vibe']}")
         if ctx.get("model_known_for"):
@@ -420,6 +441,8 @@ TYPE: {vtype}
 
 CONNAISSANCES SPECIFIQUES:
 {chr(10).join(specs_info) if specs_info else "Aucune info specifique disponible."}
+
+{f"SPECS DECODEES DU VIN (NHTSA):{chr(10)}{vin_specs_text}" if vin_specs_text else ""}
 
 OPTIONS/EQUIPEMENTS CONFIRMES:
 {chr(10).join(f"- {o}" for o in human_options) if human_options else "Aucune option confirmee."}
@@ -483,6 +506,7 @@ STYLE D'INTRO: {style}"""
             "ok": True,
             "text": text.strip(),
             "intelligence": ctx,
+            "vin_specs": vin_specs,
             "chars": len(text),
             "style": style,
             "model": "gpt-4o",

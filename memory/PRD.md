@@ -64,6 +64,10 @@
 - Boutons GENERER TEXTE, HUMANISER STICKER (Stellantis), COPIER
 - Humanisation sticker Stellantis: intro IA + titre vendeur + options ✅ MAJUSCULES + sous-options ▫️ minuscules + footer intact
 - Filtre anti-vulgarite ajoute (prompt + post-process)
+- Decodage VIN via NHTSA integre: moteur, HP, transmission, drive, places, securite
+  - vin_decoder.py: module de decodage VIN (API NHTSA gratuite, cache memoire)
+  - Enrichit automatiquement vehicle_intelligence quand les specs manquent
+  - Tags visuels dans le dashboard: 4WD, Automatic, Hybrid, places, securite
 - Tests: 27/27 backend + 100% frontend (iteration_3.json)
 
 ## Backlog
