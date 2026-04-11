@@ -910,14 +910,45 @@ def main() -> None:
 
     print(f"[REFRESH_NO_PHOTO] {len(photos_added)} posts à mettre à jour avec photos (limit={REFRESH_NO_PHOTO_LIMIT})", flush=True)
 
+    # =========================================================
+    # VENDU / SOLD — Posts FB dont le véhicule a disparu du site
+    # =========================================================
+    sold_slugs: List[str] = []
+    posts_in_db_not_in_site = set(posts_db.keys()) - set(current.keys())
+    for slug in posts_in_db_not_in_site:
+        post_data = posts_db.get(slug) or {}
+        post_status = (post_data.get("status") or "").upper()
+        post_id = (post_data.get("post_id") or "").strip()
+
+        # Skip si déjà marqué SOLD ou pas de post_id
+        if post_status == "SOLD" or not post_id:
+            continue
+
+        # Skip si le post est très récent (< 2 jours) — possible erreur de scrape
+        published_at = post_data.get("published_at") or ""
+        if published_at:
+            try:
+                from datetime import datetime as _dt, timezone as _tz
+                pub = _dt.fromisoformat(published_at.replace("Z", "+00:00"))
+                age_days = (datetime.now(_tz.utc) - pub).days
+                if age_days < 2:
+                    continue
+            except Exception:
+                pass
+
+        sold_slugs.append(slug)
+
+    print(f"[SOLD DETECT] {len(sold_slugs)} posts à marquer VENDU", flush=True)
+
     targets: List[Tuple[str, str]] = (
-        [(s, "PRICE_CHANGED") for s in price_changed]
+        [(s, "SOLD") for s in sold_slugs]
+        + [(s, "PRICE_CHANGED") for s in price_changed]
         + [(s, "NEW") for s in new_slugs]
         + [(s, "PHOTOS_ADDED") for s in photos_added[:REFRESH_NO_PHOTO_LIMIT]]
     )
 
     if not targets:
-        print(f"OK run_id={run_id} inv_count={len(current)} NEW=0 PRICE_CHANGED=0 PHOTOS_ADDED=0", flush=True)
+        print(f"OK run_id={run_id} inv_count={len(current)} NEW=0 PRICE_CHANGED=0 PHOTOS_ADDED=0 SOLD=0", flush=True)
         _run_meta_compare_safe()
         return
 
@@ -925,6 +956,7 @@ def main() -> None:
 
     posted = 0
     updated = 0
+    sold_count = 0
     skipped_dup = 0
     skipped_bad_text = 0
     skipped_no_photos = 0
@@ -932,6 +964,70 @@ def main() -> None:
     for slug, event in targets[:MAX_TARGETS]:
         v = current.get(slug) or {}
         stock = (v.get("stock") or "").strip().upper()
+
+        # =========================================================
+        # SOLD — Marquer le post Facebook comme VENDU
+        # =========================================================
+        if event == "SOLD":
+            old_post = posts_db.get(slug) or {}
+            post_id = (old_post.get("post_id") or "").strip()
+            old_stock = (old_post.get("stock") or "").strip().upper()
+
+            if not post_id:
+                continue
+
+            # Construire le message VENDU
+            sold_prefix = (
+                "🚨 VENDU 🚨\n\n"
+                "Ce véhicule n'est plus disponible.\n\n"
+                "👉 Vous recherchez un véhicule semblable ?\n"
+                "Contactez-moi directement, je peux vous aider à en trouver un rapidement.\n\n"
+                "Daniel Giroux\n"
+                "📞 418-222-3939\n"
+                "────────────────────\n\n"
+            )
+
+            # Récupérer le texte original et le préfixer avec VENDU
+            base_text = old_post.get("base_text") or ""
+            # Enlever un ancien préfixe VENDU si déjà présent (éviter doublon)
+            if "🚨 VENDU 🚨" in base_text:
+                base_text = base_text.split("────────────────────\n\n", 1)[-1]
+            sold_message = sold_prefix + base_text
+
+            try:
+                update_post_text(post_id, FB_TOKEN, sold_message)
+
+                upsert_post(
+                    sb,
+                    {
+                        "slug": slug,
+                        "post_id": post_id,
+                        "status": "SOLD",
+                        "sold_at": now,
+                        "last_updated_at": now,
+                        "base_text": sold_message,
+                        "stock": old_stock,
+                    },
+                )
+
+                sold_count += 1
+                print(
+                    f"[SOLD] ✅ slug={slug} stock={old_stock} post_id={post_id}",
+                    flush=True,
+                )
+                log_event(sb, slug, "MARKED_SOLD", {
+                    "run_id": run_id,
+                    "post_id": post_id,
+                    "stock": old_stock,
+                })
+                time.sleep(max(1, SLEEP_BETWEEN))
+
+            except Exception as e:
+                print(f"[ERROR SOLD] slug={slug} err={e}", flush=True)
+                log_event(sb, slug, "SOLD_ERROR", {"err": str(e), "run_id": run_id})
+
+            continue
+
         if not stock:
             continue
 
@@ -1168,8 +1264,8 @@ def main() -> None:
 
     print(
         f"OK run_id={run_id} inv_count={len(current)} "
-        f"NEW={len(new_slugs)} PRICE_CHANGED={len(price_changed)} PHOTOS_ADDED={len(photos_added)} "
-        f"posted={posted} updated={updated} skipped_dup={skipped_dup} "
+        f"NEW={len(new_slugs)} PRICE_CHANGED={len(price_changed)} PHOTOS_ADDED={len(photos_added)} SOLD={len(sold_slugs)} "
+        f"posted={posted} updated={updated} sold={sold_count} skipped_dup={skipped_dup} "
         f"skipped_bad_text={skipped_bad_text} skipped_no_photos={skipped_no_photos}",
         flush=True,
     )
