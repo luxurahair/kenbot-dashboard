@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 from supabase import create_client as sb_create_client
 
 ROOT_DIR = Path(__file__).parent
-load_dotenv(ROOT_DIR / '.env')
+load_dotenv(ROOT_DIR / '.env', override=False)
 
 # Supabase (for kenbot real data)
 SUPABASE_URL = os.environ.get('SUPABASE_URL', '')
@@ -20,11 +20,23 @@ sb = None
 if SUPABASE_URL and SUPABASE_KEY:
     try:
         sb = sb_create_client(SUPABASE_URL, SUPABASE_KEY)
-        logging.info("Supabase connected!")
+        print(f"[STARTUP] Supabase connected to {SUPABASE_URL[:40]}...")
     except Exception as e:
-        logging.error(f"Supabase connection failed: {e}")
+        print(f"[STARTUP] Supabase connection failed: {e}")
+else:
+    print("[STARTUP] Supabase credentials not set - running without data")
 
 app = FastAPI(title="Kenbot Dashboard API")
+
+# CORS - must be before router
+app.add_middleware(
+    CORSMiddleware,
+    allow_credentials=True,
+    allow_origins=os.environ.get('CORS_ORIGINS', '*').split(','),
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 api_router = APIRouter(prefix="/api")
 
 # ─── Supabase helpers ───
@@ -954,14 +966,6 @@ async def cockpit_recent_logs(limit: int = 30):
     }
 
 app.include_router(api_router)
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_credentials=True,
-    allow_origins=os.environ.get('CORS_ORIGINS', '*').split(','),
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
