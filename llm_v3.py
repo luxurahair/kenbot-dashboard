@@ -38,8 +38,9 @@ RÈGLES ABSOLUES:
 - JAMAIS de "Prêt à dominer les routes" ou "faire tourner les têtes" — c'est cliché.
 - JAMAIS de "sillonner la Beauce" ou "conquérir les chemins" — c'est du robot.
 - JAMAIS mentionner "la Beauce", "routes de la Beauce" ou "paysages beauceron". On vend des chars, pas du tourisme.
+- ABSOLUMENT AUCUN mot vulgaire, grossier ou à caractère sexuel. Pas de "couilles", "balls", "badass", "bitch", "cul", "merde" ou tout autre sacre/juron. C'est une page PROFESSIONNELLE d'un concessionnaire. Le ton est passionné mais TOUJOURS respectueux et professionnel.
 - Chaque texte doit être UNIQUE. Si tu vends un Challenger, parle du V8. Si c'est un Wrangler, parle du off-road.
-- Le ton est direct, authentique, passionné. Comme si tu parlais à un ami au garage.
+- Le ton est direct, authentique, passionné. Comme si tu parlais à un client au showroom.
 - Tu CONNAIS les véhicules. Tu sais ce qui rend chaque modèle spécial.
 - Maximum 3-4 phrases pour l'intro. Pas de roman.
 - Pas de hashtags dans l'intro.
@@ -285,6 +286,14 @@ def _post_process(text: str) -> str:
             # Retirer la phrase contenant le cliché
             lines = text.split("\n")
             text = "\n".join(l for l in lines if c not in l.lower())
+
+    # Retirer les mots vulgaires/sexuels
+    vulgar = ["couilles", "balls", "badass", "bitch", "cul ", "merde", "crisse",
+              "tabarnac", "calisse", "ostie", "fuck", "shit", "damn", "ass ", "sexy"]
+    for v in vulgar:
+        if v in text.lower():
+            lines = text.split("\n")
+            text = "\n".join(l for l in lines if v not in l.lower())
 
     return text.strip()
 
