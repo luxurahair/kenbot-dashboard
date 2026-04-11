@@ -1,0 +1,126 @@
+{
+  "theme": "light",
+  "archetype": "4",
+  "archetype_name": "Swiss & High-Contrast",
+  "design_philosophy": "Objective, rigid, function-first, with radical weight contrast. The Kenbot dashboard is the nerve center of the dealership's automated inventory management. Color is used strictly for data mapping and system status, never for decoration.",
+  "colors": {
+    "background": "#FDFDFD",
+    "surface": "#FFFFFF",
+    "surface_secondary": "#F9FAFB",
+    "primary": "#0A0A0A",
+    "primary_foreground": "#FFFFFF",
+    "accent_blue": "#0055FF",
+    "accent_blue_subtle": "rgba(0, 85, 255, 0.1)",
+    "accent_red": "#FF3333",
+    "accent_red_subtle": "rgba(255, 51, 51, 0.1)",
+    "accent_green": "#00CC66",
+    "accent_green_subtle": "rgba(0, 204, 102, 0.1)",
+    "accent_yellow": "#FFCC00",
+    "border": "#E5E7EB",
+    "border_heavy": "#0A0A0A",
+    "text_primary": "#0A0A0A",
+    "text_secondary": "#4B5563"
+  },
+  "typography": {
+    "heading_font": "Chivo",
+    "body_font": "IBM Plex Sans",
+    "mono_font": "IBM Plex Mono",
+    "strategy": "Swiss Brutalist - strong weight contrast between headings (Black/Bold) and body (Regular). Tight tracking on headings.",
+    "h1": "text-4xl sm:text-5xl font-black tracking-tighter text-[#0A0A0A]",
+    "h2": "text-2xl sm:text-3xl font-bold tracking-tight text-[#0A0A0A]",
+    "h3": "text-xl sm:text-2xl font-semibold tracking-tight",
+    "body": "text-base font-normal leading-relaxed text-[#0A0A0A]",
+    "mono": "font-mono text-sm tracking-tight text-[#4B5563]"
+  },
+  "layout_and_spacing": {
+    "strategy": "Dense but structured. The 'Control Room' grid protocol. High density for charts and tables.",
+    "container_padding": "p-6 md:p-12",
+    "gap": "gap-6",
+    "border_radius": "rounded-none",
+    "card_padding": "p-6"
+  },
+  "components": {
+    "cards": "Flat solid surfaces with sharp edges (`rounded-none`). 1px solid border (`border-border`). No soft shadows. For hover/active state, a hard shadow block (`shadow-[4px_4px_0px_#0A0A0A]`) and a slight `-translate-y-1`.",
+    "buttons": "Sharp edges, high contrast. Primary: `bg-[#0A0A0A] text-white hover:bg-[#333333] font-bold tracking-wide uppercase text-sm`. Secondary: `border border-[#0A0A0A] bg-transparent text-[#0A0A0A] hover:bg-[#F9FAFB] font-bold uppercase text-sm`.",
+    "tables": "Grid borders visible. High density. Monospace fonts for data columns (like IDs, run times, IPs).",
+    "badges": "Square badges, strong background colors with high contrast text. E.g., SUCCESS=Green/White, FAILED=Red/White.",
+    "inputs": "Shadcn standard but overridden to `rounded-none`, clear 1px borders, strong focus rings (`focus:ring-2 focus:ring-[#0A0A0A]`).",
+    "charts": "Shadcn charts (Recharts) with clean lines, minimal gridlines, tooltips with sharp corners."
+  },
+  "motion": {
+    "hover": "Snappy, fast transitions. `duration-150 ease-out`.",
+    "entrance": "Staggered fade-in for list items.",
+    "loaders": "ASCII spinners or stark minimalist geometric pulsing, no colorful bouncing dots."
+  },
+  "icons": {
+    "library": "iconoir-react",
+    "instructions": "Use sharp, unstyled icons. Weight 1.5px. yarn add iconoir-react"
+  },
+  "media": {
+    "image_urls": [
+      {
+        "url": "https://images.unsplash.com/photo-1760976396211-5546ce83a400?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NTY2NzB8MHwxfHNlYXJjaHwxfHxtb2Rlcm4lMjBjYXIlMjBkZWFsZXJzaGlwfGVufDB8fHx8MTc3NTg3OTA2NXww&ixlib=rb-4.1.0&q=85",
+        "category": "dealership_bg",
+        "description": "Background for auth screen or subtle hero overlay if needed."
+      },
+      {
+        "url": "https://images.unsplash.com/photo-1609386462833-6b0d46b2fce0?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NTY2NzZ8MHwxfHNlYXJjaHwxfHxkb2RnZSUyMGNoYWxsZW5nZXJ8ZW58MHx8fHwxNzc1ODc5MDY1fDA&ixlib=rb-4.1.0&q=85",
+        "category": "inventory_placeholder",
+        "description": "Placeholder image for vehicle listings without photos."
+      }
+    ]
+  },
+  "pages": {
+    "dashboard": {
+      "sections": [
+        {
+          "name": "Header",
+          "details": "Sticky header with 'KENBOT' logo (text-based, heavy tracking, font-black), system status indicator (blinking green dot for ONLINE), and main navigation links. Use solid white background with a heavy bottom border."
+        },
+        {
+          "name": "System Status & Overview",
+          "details": "Bento grid mode B (Control Room). 4 columns. Cards for: Total Vehicles, Active Posts, Needs Photos, Last Cron Run. Use massive typography for metrics (Chivo font)."
+        },
+        {
+          "name": "Main Dashboard Area (Split View)",
+          "details": "Left column (col-span-2): 'Recent Cron Runs Log' - a dense table showing timestamp, action, status, errors. Right column (col-span-1): 'Posts Status' - minimal list or a stark pie chart showing posts with photos vs no photos."
+        },
+        {
+          "name": "Inventory Stats",
+          "details": "Trend charts showing NEW vs SOLD over the last 30 days. Use monochrome palette for chart lines (black and heavy grey)."
+        }
+      ]
+    },
+    "configuration": {
+      "sections": [
+        {
+          "name": "Settings Panel",
+          "details": "Forms to manage scraping URLs, Facebook page ID, API keys, AI prompts. Grouped logically. Use sharp inputs with heavy active borders."
+        }
+      ]
+    },
+    "architecture_changelog": {
+      "sections": [
+        {
+          "name": "Architecture Diagram",
+          "details": "A beautifully styled CSS Grid based diagram showing Kennebec Dodge Website -> Scraper -> AI Generator -> Facebook API. Brutalist styling (sharp boxes, thick dashed connecting lines, arrows). No complex 3D libraries needed, pure HTML/CSS structure."
+        },
+        {
+          "name": "Fix/Changelog Viewer",
+          "details": "A sharp timeline view mapping version numbers to feature additions and bug fixes. Use monospace fonts for version numbers and dates."
+        }
+      ]
+    }
+  },
+  "instructions_to_main_agent": [
+    "Strictly follow the Archetype 4 (Swiss & High-Contrast) design rules. This is not a fun consumer app, it is a high-performance administration tool.",
+    "Use pure black/white/grey for structural elements, color ONLY for status/data mapping.",
+    "All containers, buttons, and inputs MUST use sharp edges (`rounded-none`).",
+    "Use grid lines (`border-collapse` style) for data-heavy sections. Apply 1px solid borders (`border-border`) extensively to separate data.",
+    "Load 'Chivo' (400, 700, 900), 'IBM Plex Sans' (400, 500), and 'IBM Plex Mono' from Google Fonts.",
+    "Integrate Shadcn components but strip their soft default styles (remove border radii, drop shadows, make borders 1px solid black/grey).",
+    "Include `data-testid` on all interactive elements as requested for robust automated testing.",
+    "Use `iconoir-react` for all iconography, keeping stroke weights consistent (1.5px).",
+    "Ensure hover states on interactive elements have stark contrast changes (e.g. `hover:bg-black hover:text-white`)."
+  ]
+}
