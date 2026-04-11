@@ -326,6 +326,76 @@ tr:hover td { background: var(--surface-secondary); }
 .delay-3 { animation-delay: 0.15s; opacity: 0; }
 .delay-4 { animation-delay: 0.2s; opacity: 0; }
 
+/* ─── Run Button ─── */
+.run-btn {
+  font-family: 'Chivo', sans-serif;
+  font-weight: 700;
+  font-size: 0.7rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 6px 16px;
+  background: var(--primary);
+  color: var(--primary-fg);
+  border: 2px solid var(--primary);
+  cursor: pointer;
+  transition: all 150ms ease-out;
+}
+.run-btn:hover { background: transparent; color: var(--primary); }
+
+/* ─── Run Panel ─── */
+.run-panel {
+  position: fixed;
+  top: 56px;
+  right: 0;
+  width: 380px;
+  z-index: 100;
+  animation: slide-in-right 0.2s ease-out;
+}
+@keyframes slide-in-right { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+.run-panel-inner {
+  background: var(--surface);
+  border: 2px solid var(--border-heavy);
+  border-top: none;
+  padding: 1.5rem;
+  box-shadow: -4px 4px 0px rgba(0,0,0,0.1);
+}
+.run-options { display: flex; flex-direction: column; gap: 0.75rem; margin-bottom: 1.25rem; }
+.run-option {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-family: 'IBM Plex Sans', sans-serif;
+  font-size: 0.85rem;
+}
+.run-option input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--primary); }
+.run-execute-btn {
+  width: 100%;
+  padding: 10px;
+  font-family: 'Chivo', sans-serif;
+  font-weight: 900;
+  font-size: 0.85rem;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  background: var(--accent-green);
+  color: white;
+  border: none;
+  cursor: pointer;
+  transition: all 150ms ease-out;
+}
+.run-execute-btn:hover { background: #00b359; }
+.run-execute-btn:disabled { background: var(--border); cursor: not-allowed; }
+.run-result {
+  margin-top: 1rem;
+  padding: 0.75rem;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 0.8rem;
+}
+.run-result-ok { background: var(--accent-green-subtle); border: 1px solid var(--accent-green); }
+.run-result-error { background: var(--accent-red-subtle); border: 1px solid var(--accent-red); }
+
 /* ─── Responsive ─── */
 @media (max-width: 768px) {
   .stats-grid { grid-template-columns: repeat(2, 1fr); }

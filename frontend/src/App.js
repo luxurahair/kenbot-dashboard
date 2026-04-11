@@ -58,6 +58,7 @@ function App() {
 }
 
 function Header({ tab, setTab, status }) {
+  const [showRunPanel, setShowRunPanel] = useState(false);
   const tabs = [
     { id: 'dashboard', label: 'Dashboard' },
     { id: 'inventory', label: 'Inventaire' },
@@ -68,22 +69,28 @@ function Header({ tab, setTab, status }) {
   ];
   const connected = status?.supabase_connected;
   return (
-    <header className="header" data-testid="header">
-      <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-        <span className="header-logo" data-testid="header-logo">KENBOT</span>
-        <span className={`status-dot ${connected ? '' : 'offline'}`} data-testid="status-dot" title={connected ? 'Supabase connecte' : 'Supabase deconnecte'} />
-      </div>
-      <nav className="header-nav" data-testid="header-nav">
-        {tabs.map(t => (
-          <button key={t.id} className={tab === t.id ? 'active' : ''} onClick={() => setTab(t.id)} data-testid={`nav-${t.id}`}>
-            {t.label}
+    <>
+      <header className="header" data-testid="header">
+        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+          <span className="header-logo" data-testid="header-logo">KENBOT</span>
+          <span className={`status-dot ${connected ? '' : 'offline'}`} data-testid="status-dot" title={connected ? 'Supabase connecte' : 'Supabase deconnecte'} />
+        </div>
+        <nav className="header-nav" data-testid="header-nav">
+          {tabs.map(t => (
+            <button key={t.id} className={tab === t.id ? 'active' : ''} onClick={() => setTab(t.id)} data-testid={`nav-${t.id}`}>
+              {t.label}
+            </button>
+          ))}
+        </nav>
+        <div className="header-right">
+          <button className="run-btn" onClick={() => setShowRunPanel(!showRunPanel)} data-testid="run-cron-btn">
+            RUN CRON
           </button>
-        ))}
-      </nav>
-      <div className="header-right">
-        <span className="version-tag" data-testid="version-tag">v{status?.version || '2.1.0'}</span>
-      </div>
-    </header>
+          <span className="version-tag" data-testid="version-tag">v{status?.version || '2.1.0'}</span>
+        </div>
+      </header>
+      {showRunPanel && <RunPanel onClose={() => setShowRunPanel(false)} />}
+    </>
   );
 }
 
@@ -397,6 +404,72 @@ function ChangelogTab({ changelog }) {
           </div>
         </div>
       ))}
+    </div>
+  );
+}
+
+function RunPanel({ onClose }) {
+  const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState(null);
+  const [dryRun, setDryRun] = useState(false);
+  const [maxTargets, setMaxTargets] = useState(4);
+  const [forceStock, setForceStock] = useState('');
+
+  const triggerRun = async () => {
+    setLoading(true);
+    setResult(null);
+    try {
+      const res = await fetch(`${API}/api/trigger/run`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ dry_run: dryRun, max_targets: maxTargets, force_stock: forceStock || null }),
+      });
+      const data = await res.json();
+      setResult(data);
+    } catch (e) {
+      setResult({ ok: false, message: e.message });
+    }
+    setLoading(false);
+  };
+
+  return (
+    <div className="run-panel" data-testid="run-panel">
+      <div className="run-panel-inner">
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+          <span style={{ fontFamily: 'Chivo, sans-serif', fontWeight: 900, fontSize: '1.1rem' }}>LANCER LE CRON</span>
+          <button onClick={onClose} style={{ background: 'none', border: '1px solid var(--border)', padding: '4px 12px', cursor: 'pointer', fontFamily: 'IBM Plex Mono, monospace', fontSize: '0.75rem' }} data-testid="close-run-panel">FERMER</button>
+        </div>
+
+        <div className="run-options">
+          <label className="run-option" data-testid="dry-run-toggle">
+            <input type="checkbox" checked={dryRun} onChange={e => setDryRun(e.target.checked)} />
+            <span>Dry Run</span>
+            <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>— Simule sans publier</span>
+          </label>
+
+          <div className="run-option">
+            <span>Max targets</span>
+            <input type="number" value={maxTargets} onChange={e => setMaxTargets(parseInt(e.target.value) || 4)} min={1} max={20} style={{ width: 60, fontFamily: 'IBM Plex Mono', padding: '4px 8px', border: '1px solid var(--border)' }} data-testid="max-targets-input" />
+          </div>
+
+          <div className="run-option">
+            <span>Force stock</span>
+            <input type="text" value={forceStock} onChange={e => setForceStock(e.target.value)} placeholder="ex: 06234" style={{ width: 120, fontFamily: 'IBM Plex Mono', padding: '4px 8px', border: '1px solid var(--border)', textTransform: 'uppercase' }} data-testid="force-stock-input" />
+            <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>— Optionnel</span>
+          </div>
+        </div>
+
+        <button className="run-execute-btn" onClick={triggerRun} disabled={loading} data-testid="execute-run-btn">
+          {loading ? 'ENVOI EN COURS...' : 'EXECUTER'}
+        </button>
+
+        {result && (
+          <div className={`run-result ${result.ok ? 'run-result-ok' : 'run-result-error'}`} data-testid="run-result">
+            <span style={{ fontWeight: 600 }}>{result.ok ? 'OK' : 'ERREUR'}</span>
+            <span>{result.message}</span>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

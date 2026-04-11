@@ -241,6 +241,52 @@ async def get_sticker_pdfs(limit: int = 50):
     result = sb_query("sticker_pdfs", "*", order="created_at", limit=limit)
     return result["data"]
 
+class RunOptions(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    dry_run: bool = False
+    max_targets: int = 4
+    force_stock: Optional[str] = None
+
+@api_router.post("/trigger/run")
+async def trigger_run(options: RunOptions = RunOptions()):
+    if not sb:
+        return {"ok": False, "message": "Supabase non connecte"}
+    try:
+        payload = {
+            "dry_run": options.dry_run,
+            "max_targets": options.max_targets,
+            "force_stock": options.force_stock,
+            "ts": datetime.now(timezone.utc).isoformat(),
+            "source": "kenbot-dashboard",
+        }
+        sb.table("events").insert({
+            "slug": "BOOT",
+            "type": "RUN_REQUESTED",
+            "payload": payload,
+        }).execute()
+        return {"ok": True, "message": "Run demande! Le prochain cron va l'executer.", "payload": payload}
+    except Exception as e:
+        return {"ok": False, "message": str(e)}
+
+@api_router.post("/trigger/force-stock")
+async def trigger_force_stock(stock: str):
+    if not sb:
+        return {"ok": False, "message": "Supabase non connecte"}
+    try:
+        payload = {
+            "force_stock": stock.strip().upper(),
+            "ts": datetime.now(timezone.utc).isoformat(),
+            "source": "kenbot-dashboard",
+        }
+        sb.table("events").insert({
+            "slug": "BOOT",
+            "type": "FORCE_STOCK_REQUESTED",
+            "payload": payload,
+        }).execute()
+        return {"ok": True, "message": f"Force stock {stock} demande!", "payload": payload}
+    except Exception as e:
+        return {"ok": False, "message": str(e)}
+
 @api_router.get("/changelog")
 async def get_changelog():
     return CHANGELOG
