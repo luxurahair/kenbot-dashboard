@@ -1,43 +1,43 @@
-# PRD — Kenbot Dashboard + PHOTOS_ADDED Fix
+# PRD — Kenbot Dashboard + Fix + Intelligence Vehicule
 
 ## Date: 2026-04-11
 
-## Projet
-**kenbot** — Bot d'inventaire automobile automatise pour Kennebec Dodge
-- Scrape kennebecdodge.ca (76 vehicules)
-- Publie sur Facebook (86 posts actifs)
-- Machine d'etat: NEW/SOLD/RESTORE/PRICE_CHANGED/PHOTOS_ADDED
-- 31,955 events traces dans Supabase
+## Ce qui a ete fait
 
-## Architecture
-- Repos: luxurahair/kenbot-runner, kenbot-api, kennebec-meta-feed
-- Production: Render (cron 60 min)
-- DB: Supabase (xjhqkhlocxtawiuokrlp)
-- Stack: Python 3.11, FastAPI, BeautifulSoup, Supabase, Facebook Graph API
+### Session 1 - Fix PHOTOS_ADDED
+- 3 bugs corriges dans runner_cron_prod.py (pousse sur GitHub)
+- Dashboard admin cree avec React + FastAPI
 
-## Dashboard Emergent (LIVE)
-- Connecte a Supabase en temps reel
+### Session 2 - Dashboard Supabase Live
+- Dashboard connecte aux vraies donnees Supabase
 - 6 onglets: Dashboard, Inventaire, Posts FB, Events, Architecture, Changelog
-- Donnees live: 46 actifs, 30 vendus, 82 posts, 31,955 events
-- Design: Swiss Brutalist (Chivo/IBM Plex)
+- Bouton "Run Cron" avec options (Dry Run, Max targets, Force stock)
+- Colonnes no_photo et photo_count ajoutees dans Supabase
 
-## Fix PHOTOS_ADDED (pousse sur GitHub)
-1. FIX #1: no_photo=True quand fallback utilise (_is_no_photo_fallback)
-2. FIX #2: Ordre arguments _build_ad_text corrige
-3. FIX #3: Mots-cles detection elargis
+### Session 3 - Intelligence Vehicule (EN COURS)
+- Module vehicle_intelligence.py cree avec:
+  - Base de connaissance 20+ marques (Dodge, Jeep, Ram, Ford, Toyota, etc.)
+  - Specs par modele (Challenger, Wrangler, Ram 1500, Mustang, etc.)
+  - Specs par trim (Scat Pack=485HP, Rubicon=off-road, GT=V8 Coyote, etc.)
+  - Parse automatique du titre -> brand/model/trim/year
+  - Description intelligente KM et prix
+- Module llm_v3.py cree avec:
+  - System prompt Daniel Giroux (vendeur quebecois authentique)
+  - Prompts specifiques par type de vehicule
+  - 5 styles d'intro aleatoires (direct, storytelling, question, expertise, opportunite)
+  - Filtre anti-cliches post-generation
+  - Options du sticker humanisees
+- API endpoints: /vehicle-intelligence/{stock} et /generate-text/{stock}
 
-## IMPORTANT - Colonnes manquantes
-La table posts dans Supabase n'a PAS les colonnes no_photo et photo_count.
-SQL a executer dans Supabase SQL Editor:
-```sql
-ALTER TABLE posts ADD COLUMN IF NOT EXISTS no_photo BOOLEAN DEFAULT FALSE;
-ALTER TABLE posts ADD COLUMN IF NOT EXISTS photo_count INTEGER DEFAULT 0;
-```
+## Fichiers crees
+- /app/vehicle_intelligence.py - Base de connaissance vehicule
+- /app/llm_v3.py - Generation texte v3 (OpenAI)
+- /app/kenbot-runner-fix/ - Fichiers corriges originaux
 
 ## Backlog
-- P0: Ajouter colonnes no_photo/photo_count dans Supabase (SQL ci-dessus)
-- P1: Script migration anciens posts NO_PHOTO
-- P1: Bouton "Run Now" dans dashboard
+- P0: Integrer llm_v3 dans runner_cron_prod.py (remplacer l'ancien llm.py)
+- P0: Tester la generation avec la cle OpenAI sur les vrais vehicules
+- P1: Ajouter un onglet "Preview Texte" dans le dashboard
+- P1: Enrichir la base de connaissance (plus de modeles)
 - P2: Multi-dealer (Luxura)
-- P2: Alertes erreurs (webhook/email)
-- P3: Unification couche texte
+- P2: A/B testing des styles d'intro

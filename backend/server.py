@@ -3,6 +3,11 @@ from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 import os
+import sys
+from pathlib import Path as _Path
+
+# Add parent dir to path for kenbot modules
+sys.path.insert(0, str(_Path(__file__).parent.parent))
 import logging
 from pathlib import Path
 from pydantic import BaseModel, Field, ConfigDict
@@ -290,6 +295,55 @@ async def trigger_force_stock(stock: str):
 @api_router.get("/changelog")
 async def get_changelog():
     return CHANGELOG
+
+@api_router.get("/vehicle-intelligence/{stock}")
+async def get_vehicle_intelligence(stock: str):
+    """Retourne le profil intelligent d'un véhicule par stock."""
+    if not sb:
+        return {"error": "Supabase non connecte"}
+    try:
+        from vehicle_intelligence import build_vehicle_context
+        result = sb.table("inventory").select("*").eq("stock", stock.upper()).limit(1).execute()
+        if not result.data:
+            return {"error": f"Vehicule {stock} non trouve"}
+        vehicle = result.data[0]
+        ctx = build_vehicle_context(vehicle)
+        return {"vehicle": vehicle, "intelligence": ctx}
+    except Exception as e:
+        return {"error": str(e)}
+
+@api_router.post("/generate-text/{stock}")
+async def generate_text_for_vehicle(stock: str):
+    """Génère un texte Facebook intelligent pour un véhicule."""
+    if not sb:
+        return {"ok": False, "error": "Supabase non connecte"}
+    try:
+        from vehicle_intelligence import build_vehicle_context
+        from llm_v3 import generate_smart_text
+
+        result = sb.table("inventory").select("*").eq("stock", stock.upper()).limit(1).execute()
+        if not result.data:
+            return {"ok": False, "error": f"Vehicule {stock} non trouve"}
+        vehicle = result.data[0]
+
+        # Get sticker options if available
+        options_text = ""
+        post = sb.table("posts").select("base_text").eq("stock", stock.upper()).limit(1).execute()
+        if post.data and post.data[0].get("base_text"):
+            bt = post.data[0]["base_text"]
+            # Extraire la section options du texte existant
+            if "ACCESSOIRES" in bt or "QUIPEMENTS" in bt:
+                options_text = bt
+
+        text = generate_smart_text(vehicle, event="NEW", options_text=options_text)
+        ctx = build_vehicle_context(vehicle)
+
+        if text:
+            return {"ok": True, "text": text, "intelligence": ctx, "chars": len(text)}
+        else:
+            return {"ok": False, "error": "Generation echouee - verifiez OPENAI_API_KEY", "intelligence": ctx}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
 
 @api_router.get("/architecture")
 async def get_architecture():
