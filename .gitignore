@@ -40,3 +40,12 @@ test_result.md
 backend_test.py
 design_guidelines.json
 .emergent/
+-e 
+# Environment and credential files
+.env
+.env.*
+*.env
+credentials.json
+*.pem
+*.key
+.credentials
