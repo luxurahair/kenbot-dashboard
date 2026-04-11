@@ -90,7 +90,17 @@
 - Logs recents Supabase: derniers runs + events en temps reel
 - Endpoints: /api/cockpit/simulate, /api/cockpit/decode-vin/{stock}, /api/cockpit/recent-logs
 
-### Session 9 - Enrichissement Base de Connaissance Vehicule
+### Session 10 - Preparation Deploiement Standalone (Vercel + Render)
+- Repo kenbot-dashboard/ cree avec structure standalone complete
+- Backend (api/): FastAPI pur, Supabase + OpenAI SDK direct (sans MongoDB/Emergent)
+  - server.py, vehicle_intelligence.py, vin_decoder.py
+  - render.yaml pour deploiement automatique Render
+  - requirements.txt standalone
+- Frontend (frontend/): React identique au dashboard Emergent
+  - vercel.json pour deploiement Vercel avec proxy API
+  - package.json standalone
+- 0 reference a MongoDB, Motor ou Emergent dans le code standalone
+- Pret a push sur GitHub comme nouveau repo kenbot-dashboard
 - 27 marques (ajout: Ferrari, Audi, Buick, Cadillac, Mitsubishi)
 - 43 modeles (ajout: Wagoneer, Renegade, Malibu, Civic, CR-V, Accord, Pacifica, 300, Durango, Satellite, 488GTB, Tucson, Santa Fe, Outback, Forester, Silverado, Equinox, F-150, Explorer, Bronco, Escape, Corolla, Tacoma, 4Runner, Highlander, CX-5, CX-50, ProMaster City)
 - 194 trims (ajout: Classic SLT, Sport, SLT pour Ram 1500/2500, ProMaster variantes, Durango R/T/SRT, Civic Si/Type R, etc.)
