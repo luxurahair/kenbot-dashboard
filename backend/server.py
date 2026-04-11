@@ -967,6 +967,151 @@ async def cockpit_recent_logs(limit: int = 30):
         "runs": runs["data"],
     }
 
+@api_router.get("/cockpit/audit-prix")
+async def cockpit_audit_prix():
+    """Audit prix: compare inventaire Supabase vs texte des posts FB."""
+    if not sb:
+        return {"ok": False, "error": "Supabase non connecte"}
+    import re
+
+    inv_data = sb.table("inventory").select("stock,title,price_int").eq("status", "ACTIVE").limit(500).execute()
+    posts_data = sb.table("posts").select("stock,base_text,post_id,status").eq("status", "ACTIVE").limit(500).execute()
+
+    inv_map = {v["stock"]: v for v in (inv_data.data or []) if v.get("stock")}
+    posts_map = {p["stock"]: p for p in (posts_data.data or []) if p.get("stock")}
+
+    diffs = []
+    ok_count = 0
+    for stock, post in posts_map.items():
+        inv = inv_map.get(stock)
+        if not inv:
+            continue
+        site_price = inv.get("price_int", 0)
+        bt = post.get("base_text", "") or ""
+        # Extract price from post text
+        m = re.search(r"(\d[\d\s,.]*)\s*\$", bt)
+        if not m:
+            continue
+        fb_price_str = m.group(1).replace(" ", "").replace(",", "").replace(".", "")
+        try:
+            fb_price = int(fb_price_str)
+        except ValueError:
+            continue
+        if fb_price != site_price:
+            diffs.append({
+                "stock": stock,
+                "title": inv.get("title", ""),
+                "site_price": site_price,
+                "fb_price": fb_price,
+                "diff": site_price - fb_price,
+                "post_id": post.get("post_id", ""),
+            })
+        else:
+            ok_count += 1
+
+    return {"ok": True, "matching": ok_count, "diffs": diffs, "diff_count": len(diffs)}
+
+@api_router.get("/cockpit/sync-status")
+async def cockpit_sync_status():
+    """Vue complete: inventaire vs posts vs site."""
+    if not sb:
+        return {"ok": False, "error": "Supabase non connecte"}
+
+    inv_data = sb.table("inventory").select("stock,title,price_int,status,km_int").limit(500).execute()
+    posts_data = sb.table("posts").select("stock,post_id,status,no_photo,photo_count,published_at,last_updated_at").limit(500).execute()
+
+    inv_active = {v["stock"]: v for v in (inv_data.data or []) if v.get("status") == "ACTIVE"}
+    inv_sold = {v["stock"]: v for v in (inv_data.data or []) if v.get("status") == "SOLD"}
+    posts_active = {p["stock"]: p for p in (posts_data.data or []) if p.get("status") == "ACTIVE"}
+    posts_sold = {p["stock"]: p for p in (posts_data.data or []) if p.get("status") == "SOLD"}
+
+    # Véhicules sans post FB
+    no_post = [{"stock": s, "title": v.get("title","")} for s, v in inv_active.items() if s not in posts_active and s not in posts_sold]
+    # Posts dont le véhicule est vendu (à marquer VENDU)
+    ghost_posts = [{"stock": s, "post_id": p.get("post_id",""), "title": inv_sold.get(s,{}).get("title","")} for s, p in posts_active.items() if s in inv_sold or s not in inv_active]
+    # Posts NO_PHOTO
+    no_photo_posts = [{"stock": s, "post_id": p.get("post_id",""), "photo_count": p.get("photo_count")} for s, p in posts_active.items() if p.get("no_photo") or p.get("photo_count") == 0]
+
+    return {
+        "ok": True,
+        "inventory_active": len(inv_active),
+        "inventory_sold": len(inv_sold),
+        "posts_active": len(posts_active),
+        "posts_sold": len(posts_sold),
+        "vehicles_without_post": no_post,
+        "ghost_posts_to_mark_sold": ghost_posts,
+        "no_photo_posts": no_photo_posts,
+    }
+
+@api_router.post("/cockpit/update-text/{stock}")
+async def cockpit_update_text(stock: str):
+    """Regenere le texte IA et met a jour le post dans Supabase (pas sur FB - le cron s'en charge)."""
+    if not sb:
+        return {"ok": False, "error": "Supabase non connecte"}
+    try:
+        from vehicle_intelligence import build_vehicle_context
+        from emergentintegrations.llm.chat import LlmChat, UserMessage
+
+        inv = sb.table("inventory").select("*").eq("stock", stock.upper()).limit(1).execute()
+        if not inv.data:
+            return {"ok": False, "error": f"Stock {stock} non trouve"}
+        vehicle = inv.data[0]
+
+        post = sb.table("posts").select("*").eq("stock", stock.upper()).limit(1).execute()
+        if not post.data:
+            return {"ok": False, "error": f"Pas de post pour {stock}"}
+
+        # Generate new text via generate-text endpoint logic
+        res = await generate_text_for_vehicle(stock, "UPDATE")
+        if not res.get("ok"):
+            return {"ok": False, "error": res.get("error", "Generation echouee")}
+
+        new_text = res["text"]
+
+        # Update post base_text in Supabase
+        sb.table("posts").update({
+            "base_text": new_text,
+            "last_updated_at": datetime.now(timezone.utc).isoformat(),
+        }).eq("stock", stock.upper()).execute()
+
+        return {
+            "ok": True,
+            "stock": stock.upper(),
+            "new_text": new_text,
+            "chars": len(new_text),
+            "note": "Texte mis a jour dans Supabase. Le prochain run du cron mettra a jour Facebook.",
+        }
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+@api_router.post("/cockpit/rebuild-posts")
+async def cockpit_rebuild_posts():
+    """Reconstruit la correspondance inventory-posts en verifiant les stocks."""
+    if not sb:
+        return {"ok": False, "error": "Supabase non connecte"}
+    try:
+        inv = sb.table("inventory").select("stock,status").limit(500).execute()
+        posts = sb.table("posts").select("stock,status,post_id").limit(500).execute()
+
+        inv_active_stocks = set(v["stock"] for v in (inv.data or []) if v.get("status") == "ACTIVE")
+        now = datetime.now(timezone.utc).isoformat()
+        fixed = 0
+
+        for p in (posts.data or []):
+            stock = p.get("stock", "")
+            post_status = (p.get("status") or "").upper()
+            if stock not in inv_active_stocks and post_status == "ACTIVE":
+                sb.table("posts").update({
+                    "status": "SOLD",
+                    "sold_at": now,
+                    "last_updated_at": now,
+                }).eq("stock", stock).execute()
+                fixed += 1
+
+        return {"ok": True, "posts_marked_sold": fixed, "inventory_active": len(inv_active_stocks)}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
 @api_router.post("/status", response_model=StatusCheck)
 async def create_status_check(input: StatusCheckCreate):
     status_dict = input.model_dump()

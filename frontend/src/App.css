@@ -703,6 +703,80 @@ tr:hover td { background: var(--surface-secondary); }
 .ck-ev-slug { max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ck-ev-payload { color: var(--text-secondary); font-size: 0.65rem; max-width: 250px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
+/* Cockpit actions row */
+.ck-actions-row {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1.5rem;
+}
+.ck-action-btn {
+  font-family: 'Chivo', sans-serif;
+  font-weight: 700;
+  font-size: 0.7rem;
+  letter-spacing: 0.08em;
+  padding: 10px 20px;
+  border: 2px solid var(--border-heavy);
+  cursor: pointer;
+  text-transform: uppercase;
+  transition: all 150ms;
+  background: var(--surface);
+}
+.ck-action-btn:hover { background: var(--primary); color: var(--primary-fg); border-color: var(--primary); }
+.ck-action-btn:disabled { opacity: 0.4; cursor: wait; }
+.ck-action-sync { border-color: var(--accent-blue); color: var(--accent-blue); }
+.ck-action-audit { border-color: #F59E0B; color: #B45309; }
+.ck-action-rebuild { border-color: var(--accent-red); color: var(--accent-red); }
+
+/* Cockpit panels */
+.ck-panel {
+  border: 2px solid var(--border-heavy);
+  background: var(--surface);
+  padding: 1.25rem 1.5rem;
+  margin-bottom: 1.5rem;
+}
+.ck-panel-title {
+  font-family: 'Chivo', sans-serif;
+  font-weight: 900;
+  font-size: 0.85rem;
+  margin-bottom: 0.75rem;
+}
+.ck-sync-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0;
+  border: 1px solid var(--border);
+  margin-bottom: 1rem;
+}
+.ck-sync-stat {
+  padding: 0.75rem;
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  font-size: 0.72rem;
+  font-family: 'IBM Plex Mono', monospace;
+}
+.ck-sync-stat:last-child { border-right: none; }
+.ck-sync-val { font-family: 'Chivo', sans-serif; font-weight: 900; font-size: 1.5rem; }
+.ck-sync-section { margin-top: 0.75rem; }
+.ck-sync-section-title {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-secondary);
+  margin-bottom: 0.4rem;
+}
+.ck-sync-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.3rem 0;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 0.75rem;
+  border-bottom: 1px solid var(--border);
+}
+
 /* ─── Text Preview Tab ─── */
 .tp-layout {
   display: grid;

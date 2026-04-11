@@ -95,13 +95,16 @@
 - Backend deploye sur Render: https://kenbot-dashboard-api.onrender.com (LIVE)
 - Frontend Vercel en cours de config
 
-### Session 11 - Detection VENDU/SOLD dans runner_cron_prod
-- Logique SOLD ajoutee (manquait par rapport a l'ancienne version kenbot.py)
-- Detecte les vehicules disparus du site (post FB existe mais plus en inventaire)
-- Met a jour le post Facebook avec "🚨 VENDU 🚨 - Ce vehicule n'est plus disponible"
-- Marque status=SOLD + sold_at dans Supabase
-- Protection: skip si post < 2 jours (possible erreur scrape), skip si deja SOLD
-- Ordre des targets: SOLD > PRICE_CHANGED > NEW > PHOTOS_ADDED
+### Session 11 - Detection VENDU/SOLD + Cockpit complet
+- Logique SOLD ajoutee dans runner_cron_prod.py
+- Scrape complet Kennebec: 48 vehicules actifs, 16 inseres, 16 marques SOLD, 11 prix changes
+- Dashboard enrichi avec 4 nouveaux endpoints:
+  - /api/cockpit/sync-status: vue inventaire vs posts vs FB (NEW, SOLD, NO_PHOTO)
+  - /api/cockpit/audit-prix: compare prix site vs texte FB (6 differences detectees)
+  - /api/cockpit/rebuild-posts: marquer SOLD les posts orphelins en un clic
+  - /api/cockpit/update-text/{stock}: regenerer texte IA + sauver dans Supabase
+- 3 boutons Cockpit: SYNC STATUS, AUDIT PRIX, MARQUER VENDUS
+- Couverture fonctionnelle = ancien kenbot.py + VIN NHTSA + humanisation sticker + intelligence vehicule
 - 27 marques (ajout: Ferrari, Audi, Buick, Cadillac, Mitsubishi)
 - 43 modeles (ajout: Wagoneer, Renegade, Malibu, Civic, CR-V, Accord, Pacifica, 300, Durango, Satellite, 488GTB, Tucson, Santa Fe, Outback, Forester, Silverado, Equinox, F-150, Explorer, Bronco, Escape, Corolla, Tacoma, 4Runner, Highlander, CX-5, CX-50, ProMaster City)
 - 194 trims (ajout: Classic SLT, Sport, SLT pour Ram 1500/2500, ProMaster variantes, Durango R/T/SRT, Civic Si/Type R, etc.)

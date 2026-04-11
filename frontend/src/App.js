@@ -423,6 +423,12 @@ function CockpitTab({ inventory, status }) {
   const [copiedIdx, setCopiedIdx] = useState(null);
   const [logs, setLogs] = useState(null);
   const [logsLoading, setLogsLoading] = useState(false);
+  const [syncStatus, setSyncStatus] = useState(null);
+  const [syncLoading, setSyncLoading] = useState(false);
+  const [auditPrix, setAuditPrix] = useState(null);
+  const [auditLoading, setAuditLoading] = useState(false);
+  const [rebuildResult, setRebuildResult] = useState(null);
+  const [rebuildLoading, setRebuildLoading] = useState(false);
 
   const stats = status?.stats || {};
   const inv = stats.inventory || {};
@@ -453,6 +459,34 @@ function CockpitTab({ inventory, status }) {
       setLogs(data);
     } catch (e) { setLogs({ ok: false, error: e.message }); }
     setLogsLoading(false);
+  };
+
+  const loadSyncStatus = async () => {
+    setSyncLoading(true);
+    try {
+      const res = await fetch(`${API}/api/cockpit/sync-status`);
+      setSyncStatus(await res.json());
+    } catch (e) { setSyncStatus({ ok: false, error: e.message }); }
+    setSyncLoading(false);
+  };
+
+  const loadAuditPrix = async () => {
+    setAuditLoading(true);
+    try {
+      const res = await fetch(`${API}/api/cockpit/audit-prix`);
+      setAuditPrix(await res.json());
+    } catch (e) { setAuditPrix({ ok: false, error: e.message }); }
+    setAuditLoading(false);
+  };
+
+  const runRebuildPosts = async () => {
+    if (!window.confirm('Marquer comme SOLD tous les posts dont le vehicule a disparu?')) return;
+    setRebuildLoading(true);
+    try {
+      const res = await fetch(`${API}/api/cockpit/rebuild-posts`, { method: 'POST' });
+      setRebuildResult(await res.json());
+    } catch (e) { setRebuildResult({ ok: false, error: e.message }); }
+    setRebuildLoading(false);
   };
 
   const handleCopy = (text, idx) => {
@@ -615,6 +649,77 @@ function CockpitTab({ inventory, status }) {
           </div>
         )}
       </div>
+
+      {/* Action buttons row */}
+      <div className="ck-actions-row" data-testid="ck-actions-row">
+        <button className="ck-action-btn ck-action-sync" onClick={loadSyncStatus} disabled={syncLoading} data-testid="ck-sync-btn">
+          {syncLoading ? '...' : 'SYNC STATUS'}
+        </button>
+        <button className="ck-action-btn ck-action-audit" onClick={loadAuditPrix} disabled={auditLoading} data-testid="ck-audit-btn">
+          {auditLoading ? '...' : 'AUDIT PRIX'}
+        </button>
+        <button className="ck-action-btn ck-action-rebuild" onClick={runRebuildPosts} disabled={rebuildLoading} data-testid="ck-rebuild-btn">
+          {rebuildLoading ? '...' : 'MARQUER VENDUS'}
+        </button>
+      </div>
+
+      {/* Sync Status Panel */}
+      {syncStatus?.ok && (
+        <div className="ck-panel" data-testid="ck-sync-panel">
+          <div className="ck-panel-title">Sync Status</div>
+          <div className="ck-sync-grid">
+            <div className="ck-sync-stat"><span className="ck-sync-val">{syncStatus.inventory_active}</span><span>Inventaire actif</span></div>
+            <div className="ck-sync-stat"><span className="ck-sync-val">{syncStatus.inventory_sold}</span><span>Vendus (inv)</span></div>
+            <div className="ck-sync-stat"><span className="ck-sync-val">{syncStatus.posts_active}</span><span>Posts FB actifs</span></div>
+            <div className="ck-sync-stat"><span className="ck-sync-val">{syncStatus.posts_sold}</span><span>Posts FB vendus</span></div>
+          </div>
+          {syncStatus.vehicles_without_post?.length > 0 && (
+            <div className="ck-sync-section">
+              <div className="ck-sync-section-title">SANS post FB ({syncStatus.vehicles_without_post.length})</div>
+              {syncStatus.vehicles_without_post.map((v,i) => <div key={i} className="ck-sync-item"><span className="badge badge-warning">NEW</span><span>{v.stock}</span><span>{v.title}</span></div>)}
+            </div>
+          )}
+          {syncStatus.ghost_posts_to_mark_sold?.length > 0 && (
+            <div className="ck-sync-section">
+              <div className="ck-sync-section-title">A marquer VENDU ({syncStatus.ghost_posts_to_mark_sold.length})</div>
+              {syncStatus.ghost_posts_to_mark_sold.map((p,i) => <div key={i} className="ck-sync-item"><span className="badge badge-error">SOLD</span><span>{p.stock}</span><span>{p.title || p.post_id}</span></div>)}
+            </div>
+          )}
+          {syncStatus.no_photo_posts?.length > 0 && (
+            <div className="ck-sync-section">
+              <div className="ck-sync-section-title">SANS photos ({syncStatus.no_photo_posts.length})</div>
+              {syncStatus.no_photo_posts.map((p,i) => <div key={i} className="ck-sync-item"><span className="badge" style={{background:'#F59E0B',color:'white'}}>NO PHOTO</span><span>{p.stock}</span></div>)}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Audit Prix */}
+      {auditPrix?.ok && (
+        <div className="ck-panel" data-testid="ck-audit-panel">
+          <div className="ck-panel-title">Audit Prix — Site vs Facebook</div>
+          <div style={{display:'flex',gap:'0.5rem',padding:'0.5rem 0'}}>
+            <span className="badge badge-ok">{auditPrix.matching} OK</span>
+            <span className="badge badge-error">{auditPrix.diff_count} differences</span>
+          </div>
+          {auditPrix.diffs?.map((d,i) => (
+            <div key={i} className="ck-sync-item">
+              <span className="ck-result-stock">{d.stock}</span>
+              <span>{d.title?.slice(0,30)}</span>
+              <span className="badge badge-error">FB: {d.fb_price?.toLocaleString()} $</span>
+              <span>→</span>
+              <span className="badge badge-ok">Site: {d.site_price?.toLocaleString()} $</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Rebuild Result */}
+      {rebuildResult?.ok && (
+        <div className="ck-panel"><div style={{display:'flex',gap:'0.75rem',alignItems:'center',padding:'0.5rem 0'}}>
+          <span className="badge badge-ok">OK</span><span>{rebuildResult.posts_marked_sold} posts marques SOLD</span>
+        </div></div>
+      )}
     </div>
   );
 }
