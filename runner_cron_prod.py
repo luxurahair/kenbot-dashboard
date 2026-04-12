@@ -437,56 +437,82 @@ def _ensure_contact_footer(text: str, v: Dict[str, Any] = None) -> str:
 
 def _build_seo_hashtags(v: Dict[str, Any]) -> List[str]:
     """
-    Génère des hashtags SEO dynamiques pour maximiser l'indexation Google.
-    Les posts Facebook publics sont indexés par Google.
+    Génère des hashtags SEO dynamiques orientés vente + Daniel Giroux.
     """
     tags = []
     title = (v.get("title") or "").strip()
+    import re
 
-    # Extraire marque et modèle du titre
+    # Extraire marque et modèle
     parts = title.split()
     if len(parts) >= 2:
-        make = parts[0]  # Dodge, Ram, Jeep, Ford...
-        model = parts[1]  # Hornet, 1500, Wrangler...
+        make = parts[0]
+        model = parts[1]
         tags.append(f"#{make}")
         tags.append(f"#{make}{model}")
 
     # Année
-    import re
     m = re.search(r"\b(20[12]\d)\b", title)
     if m:
         year = m.group(1)
         if len(parts) >= 2:
             tags.append(f"#{parts[0]}{year}")
 
-    # Tags fixes SEO local Beauce
+    # Daniel Giroux — marque personnelle
     tags.extend([
         "#DanielGiroux",
+        "#ConseillerExpert",
         "#KennebecDodge",
-        "#Beauce",
-        "#SaintGeorges",
-        "#AutoUsagée",
-        "#Québec",
     ])
 
-    # Tags spécifiques au type
+    # SEO local Beauce (recherches Google)
+    tags.extend([
+        "#Beauce",
+        "#SaintGeorges",
+        "#Québec",
+        "#AutoUsagée",
+        "#AutoÀVendre",
+    ])
+
+    # Tags spécifiques vente par type de véhicule
     title_lower = title.lower()
+    price_int = v.get("price_int")
+
     if any(w in title_lower for w in ["1500", "2500", "3500", "ram"]):
-        tags.append("#Pickup")
-        tags.append("#Truck")
+        tags.extend(["#Pickup", "#Truck", "#CamionÀVendre", "#PickupUsagé"])
     if any(w in title_lower for w in ["wrangler", "gladiator"]):
-        tags.append("#Jeep4x4")
-        tags.append("#OffRoad")
+        tags.extend(["#Jeep4x4", "#OffRoad", "#JeepÀVendre"])
+    if any(w in title_lower for w in ["grand cherokee", "wagoneer"]):
+        tags.extend(["#SUVLuxe", "#SUVÀVendre"])
     if any(w in title_lower for w in ["hellcat", "scat pack", "srt"]):
-        tags.append("#MuscleCarQuébec")
+        tags.extend(["#MuscleCar", "#Performance", "#DodgePerformance"])
     if any(w in title_lower for w in ["4xe", "hybrid", "phev"]):
-        tags.append("#Hybride")
-        tags.append("#ÉcoÉnergie")
+        tags.extend(["#Hybride", "#PHEV", "#ÉcoÉnergie", "#VéhiculeÉlectrique"])
     if any(w in title_lower for w in ["hornet"]):
-        tags.append("#SUVCompact")
+        tags.extend(["#SUVCompact", "#HornetRTPLUS"])
     if any(w in title_lower for w in ["promaster"]):
-        tags.append("#Utilitaire")
-        tags.append("#Commercial")
+        tags.extend(["#Utilitaire", "#Commercial", "#Fourgon"])
+    if any(w in title_lower for w in ["challenger", "charger"]):
+        tags.extend(["#MuscleCar", "#DodgePerformance"])
+    if any(w in title_lower for w in ["durango"]):
+        tags.extend(["#SUV7Places", "#SUVFamilial"])
+    if any(w in title_lower for w in ["mustang"]):
+        tags.extend(["#FordMustang", "#MuscleCar", "#SportCar"])
+    if any(w in title_lower for w in ["ferrari", "lamborghini", "porsche", "maserati"]):
+        tags.extend(["#Exotique", "#LuxuryCarQuébec", "#SuperCar"])
+
+    # Prix attractif
+    if isinstance(price_int, int):
+        if price_int < 25000:
+            tags.append("#MoinsDe25000")
+        elif price_int < 35000:
+            tags.append("#MoinsDe35000")
+        elif price_int < 50000:
+            tags.append("#MoinsDe50000")
+
+    # Financement
+    tags.append("#FinancementDisponible")
+    tags.append("#ÉchangeAccepté")
 
     return tags
 
@@ -637,14 +663,16 @@ def _humanize_sticker_text(
             pass
 
     system_msg = (
-        "Tu es Daniel Giroux, vendeur passionne chez Kennebec Dodge Chrysler a Saint-Georges.\n"
+        "Tu es Daniel Giroux, conseiller expert depuis pres de 20 ans chez Kennebec Dodge Chrysler a Saint-Georges.\n"
+        "Tu es reconnu pour ton expertise, ta passion des vehicules et ton approche humaine.\n"
         "Tu recois une annonce Facebook generee a partir du Window Sticker d'un vehicule Stellantis.\n\n"
         "TON TRAVAIL — Humaniser cette annonce en respectant ces regles STRICTES:\n\n"
         "1. INTRO (3-4 phrases au debut):\n"
-        "   Ajoute une intro percutante, quebecoise, passionnee, specifique au vehicule.\n"
-        "   Pas de cliches, pas de vulgarite. Professionnel mais passionne.\n"
-        "   ABSOLUMENT AUCUN mot vulgaire, grossier ou a caractere sexuel.\n"
-        "   JAMAIS de 'sillonner', 'dominer', 'Beauce', 'routes de la Beauce' dans l'intro.\n\n"
+        "   Ecris en tant que Daniel Giroux, expert automobile.\n"
+        "   Ton ton: professionnel, passionne, quebecois, authentique.\n"
+        "   Mentionne TON expertise ou TON avis personnel sur le vehicule.\n"
+        "   Pas de cliches, pas de vulgarite. JAMAIS de 'sillonner', 'dominer', 'Beauce', 'routes de la Beauce'.\n"
+        "   ABSOLUMENT AUCUN mot vulgaire, grossier ou a caractere sexuel.\n\n"
         "2. TITRE:\n"
         "   Remplace SEULEMENT la premiere ligne (titre entre emojis) par un titre plus vendeur.\n\n"
         "3. OPTIONS — Structure STRICTE:\n"
@@ -652,9 +680,10 @@ def _humanize_sticker_text(
         "   ▫️ = sous-options en minuscules, en retrait\n"
         "   NE SUPPRIME AUCUNE LIGNE. Chaque ✅ et ▫️ doit rester.\n"
         "   Traduis les noms techniques en francais lisible.\n\n"
-        "4. NE DUPLIQUE PAS les sections (echanges, footer, hashtags).\n"
-        "   Si la section 'J'accepte les echanges' est deja presente, NE LA REPETE PAS.\n"
-        "   Le footer avec Daniel Giroux et les hashtags sera ajoute automatiquement.\n\n"
+        "4. NE METS AUCUN LIEN vers kennebecdodge.ca. Pas de 'Fiche complete'.\n"
+        "   Le lien Window Sticker Chrysler est OK s'il est deja present.\n\n"
+        "5. NE DUPLIQUE PAS les sections (echanges, footer, hashtags).\n"
+        "   Le footer professionnel avec ma signature sera ajoute automatiquement.\n\n"
         "NE RAJOUTE RIEN a la fin. Pas de footer, pas de hashtags, pas de coordonnees.\n"
         "Termine apres la derniere option ou le lien Window Sticker."
     )

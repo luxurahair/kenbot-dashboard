@@ -207,19 +207,10 @@ def build_ad(
                 kept += 1
 
         lines.append("")
-        lines.append("📌 Le reste des détails est dans le Window Sticker :")
-        lines.append("")
         if v:
+            lines.append("📌 Window Sticker complet :")
             lines.append(f"https://www.chrysler.com/hostd/windowsticker/getWindowStickerPdf.do?vin={v}")
-        else:
-            lines.append("(VIN introuvable — lien Window Sticker non généré)")
-        lines.append("")
-
-    # --- Lien Kennebec (optionnel) ---
-    if vehicle_url:
-        lines.append("🔗 Fiche complète :")
-        lines.append(vehicle_url)
-        lines.append("")
+            lines.append("")
 
     # NOTE: Le footer (échanges, téléphone, hashtags) est ajouté par footer_utils.py
     # NE PAS l'ajouter ici pour éviter les doublons.

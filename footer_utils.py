@@ -21,24 +21,24 @@ from typing import List, Optional
 
 DEALER_NAME = "Daniel Giroux"
 DEALER_PHONE = "418-222-3939"
-DEALER_LOCATION = "Saint-Georges (Beauce)"
+DEALER_TITLE = "Conseiller expert"
+DEALER_EXPERIENCE = "20 ans"
+DEALER_DEALERSHIP = "Kennebec Dodge Chrysler"
+DEALER_LOCATION = "Saint-Georges, Beauce"
 
 # Marqueurs qui indiquent qu'un footer est déjà présent
-# Si 2+ de ces marqueurs sont trouvés, on considère qu'il y a un footer
 FOOTER_MARKERS = [
     "418-222-3939",
     "418 222 3939",
     "daniel giroux",
+    "conseiller expert",
     "j'accepte les échanges",
     "j'accepte les echanges",
-    "écris-moi en privé",
-    "ecris-moi en prive",
     "#danielgiroux",
     "[[dg_footer]]",
 ]
 
-# Seuil: combien de marqueurs minimum pour considérer qu'un footer existe
-FOOTER_MARKER_THRESHOLD = 1  # 1 seul marqueur suffit (le téléphone est unique)
+FOOTER_MARKER_THRESHOLD = 1
 
 
 # ============================================================
@@ -99,31 +99,31 @@ def get_dealer_footer(
     hashtags: Optional[List[str]] = None,
 ) -> str:
     """
-    Génère le footer standard Daniel Giroux.
-    
-    Args:
-        include_echanges: Inclure la section "J'accepte les échanges"
-        include_hashtags: Inclure les hashtags
-        hashtags: Liste de hashtags personnalisés (sinon défaut)
-    
-    Returns:
-        Le footer formaté.
+    Génère la signature professionnelle Daniel Giroux.
+    Centrée sur Daniel comme marque personnelle, pas sur le site web.
     """
     lines = []
-    
+
+    # Signature professionnelle
+    lines.append("━━━━━━━━━━━━━━━━━━━━")
+    lines.append(f"👤 {DEALER_NAME}")
+    lines.append(f"📋 {DEALER_TITLE} | Près de {DEALER_EXPERIENCE} d'expérience")
+    lines.append(f"🏢 {DEALER_DEALERSHIP} — {DEALER_LOCATION}")
+    lines.append(f"📞 Appelez-moi directement : {DEALER_PHONE}")
+    lines.append(f"💬 Écrivez-moi en privé sur Messenger — je réponds rapidement.")
+    lines.append("")
+
     if include_echanges:
         lines.append("🔁 J'accepte les échanges : 🚗 auto • 🏍️ moto • 🛥️ bateau • 🛻 VTT • 🏁 côte-à-côte")
-        lines.append("📸 Envoie-moi les photos + infos de ton échange (année / km / paiement restant) → je te reviens vite.")
+        lines.append("📸 Envoie-moi les photos + infos de ton véhicule (année / km / paiement restant) → je te reviens vite.")
         lines.append("")
-    
-    lines.append(f"📞 {DEALER_NAME} — {DEALER_PHONE}")
-    
+
     if include_hashtags:
         if hashtags:
             lines.append(" ".join(hashtags))
         else:
-            lines.append("#DanielGiroux #Beauce #Quebec #SaintGeorges")
-    
+            lines.append("#DanielGiroux #ConseillerExpert #KennebecDodge #Beauce #SaintGeorges #Québec")
+
     return "\n".join(lines).strip()
 
 
