@@ -38,6 +38,8 @@ from fb_api import (
     create_post_with_attached_media,
     update_post_text,
     delete_post,
+    fetch_page_posts,
+    count_post_photos,
 )
 from supabase_db import (
     get_client,
@@ -1095,17 +1097,19 @@ def main() -> None:
     print(f"[REFRESH_NO_PHOTO] {len(photos_added)} posts à mettre à jour avec photos (limit={REFRESH_NO_PHOTO_LIMIT})", flush=True)
 
     # =========================================================
-    # VENDU / SOLD — Posts FB dont le véhicule a disparu du site
-    # SÉCURITÉ: Double vérification slug ET stock pour éviter
-    # de marquer VENDU un véhicule encore sur Kennebec
+    # VENDU / SOLD — Comparaison réelle Kennebec vs Facebook
+    # Scrape les posts FB, extrait les stocks, compare avec Kennebec
     # =========================================================
-    # Construire un set de tous les stocks actuels sur Kennebec
+    # 1. Construire le set de tous les stocks ACTIFS sur Kennebec
     current_stocks = set()
     for _slug, _v in current.items():
         _st = (_v.get("stock") or "").strip().upper()
         if _st:
             current_stocks.add(_st)
 
+    print(f"[SOLD CHECK] Kennebec stocks actifs: {len(current_stocks)}", flush=True)
+
+    # 2. Vérifier chaque post en DB: si le stock est encore sur Kennebec → PAS vendu
     sold_slugs: List[str] = []
     posts_in_db_not_in_site = set(posts_db.keys()) - set(current.keys())
     for slug in posts_in_db_not_in_site:
@@ -1117,30 +1121,35 @@ def main() -> None:
         if post_status == "SOLD" or not post_id:
             continue
 
-        # SÉCURITÉ: Vérifier que le stock n'existe PAS dans le scrape actuel
-        # (protège contre les changements de slug pour un même véhicule)
+        # SÉCURITÉ: Vérifier que le stock n'existe PAS dans le scrape Kennebec
         post_stock = (post_data.get("stock") or "").strip().upper()
         if post_stock and post_stock in current_stocks:
             print(
                 f"[SOLD BLOCKED] slug={slug} stock={post_stock} — "
-                f"stock encore sur Kennebec, slug a probablement changé. PAS marqué VENDU.",
+                f"stock encore sur Kennebec. PAS marqué VENDU.",
                 flush=True,
             )
             continue
 
-        # Skip si le post est très récent (< 2 jours) — possible erreur de scrape
+        # Skip si le post est très récent (< 3 jours) — possible erreur de scrape
         published_at = post_data.get("published_at") or ""
         if published_at:
             try:
                 from datetime import datetime as _dt, timezone as _tz
                 pub = _dt.fromisoformat(published_at.replace("Z", "+00:00"))
                 age_days = (datetime.now(_tz.utc) - pub).days
-                if age_days < 2:
+                if age_days < 3:
+                    print(
+                        f"[SOLD SKIP RECENT] slug={slug} stock={post_stock} "
+                        f"age={age_days}d < 3d — trop récent pour marquer VENDU",
+                        flush=True,
+                    )
                     continue
             except Exception:
                 pass
 
         sold_slugs.append(slug)
+        print(f"[SOLD CANDIDATE] slug={slug} stock={post_stock} — pas sur Kennebec, sera marqué VENDU", flush=True)
 
     print(f"[SOLD DETECT] {len(sold_slugs)} posts à marquer VENDU", flush=True)
 

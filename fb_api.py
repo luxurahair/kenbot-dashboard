@@ -257,3 +257,59 @@ def fetch_fb_post_message(post_id: str, token: str) -> str:
 # Alias (si tu veux un nom plus court)
 def fetch_post_message(post_id: str, token: str) -> str:
     return fetch_fb_post_message(post_id, token)
+
+
+
+def fetch_page_posts(page_id: str, token: str, limit: int = 100) -> List[Dict[str, Any]]:
+    """
+    Récupère les posts publiés sur la page FB.
+    Retourne une liste de {id, message, created_time, attachments}.
+    Pagine automatiquement jusqu'à `limit`.
+    """
+    all_posts: List[Dict[str, Any]] = []
+    url = _graph(f"{page_id}/feed")
+    params = {
+        "access_token": token,
+        "fields": "id,message,created_time,attachments{media_type,subattachments}",
+        "limit": min(limit, 100),
+    }
+
+    while len(all_posts) < limit:
+        try:
+            resp = requests.get(url, params=params, timeout=30)
+            if not resp.ok:
+                print(f"[FB FEED] Error {resp.status_code}: {_json_or_text(resp)}")
+                break
+            data = resp.json()
+        except Exception as e:
+            print(f"[FB FEED] Request failed: {e}")
+            break
+
+        posts = data.get("data") or []
+        if not posts:
+            break
+
+        all_posts.extend(posts)
+
+        # Pagination
+        paging = data.get("paging", {})
+        next_url = paging.get("next")
+        if not next_url:
+            break
+        url = next_url
+        params = {}  # next_url contient déjà les params
+
+    return all_posts[:limit]
+
+
+def count_post_photos(post: Dict[str, Any]) -> int:
+    """Compte le nombre de photos dans un post FB."""
+    attachments = post.get("attachments", {}).get("data", [])
+    count = 0
+    for att in attachments:
+        if att.get("media_type") == "photo":
+            count += 1
+        # Subattachments (album)
+        subs = att.get("subattachments", {}).get("data", [])
+        count += len(subs)
+    return max(count, 1) if attachments else 0
