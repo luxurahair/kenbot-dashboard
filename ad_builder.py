@@ -221,8 +221,7 @@ def build_ad(
         lines.append(vehicle_url)
         lines.append("")
 
-    # --- Échanges ---
-    lines.append("🔁 J’accepte les échanges : 🚗 auto • 🏍️ moto • 🛥️ bateau • 🛻 VTT • 🏁 côte-à-côte")
-    lines.append("📸 Envoie-moi les photos + infos de ton échange (année / km / paiement restant) → je te reviens vite.")
+    # NOTE: Le footer (échanges, téléphone, hashtags) est ajouté par footer_utils.py
+    # NE PAS l'ajouter ici pour éviter les doublons.
 
     return "\n".join(lines).strip() + "\n"
