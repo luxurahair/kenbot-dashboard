@@ -981,7 +981,7 @@ def main() -> None:
                 price_changed.append(slug)
 
     # =========================================================
-    # FIX #3: PHOTOS_ADDED - Détection améliorée multi-méthodes
+    # PHOTOS_ADDED - Détection multi-méthodes
     # =========================================================
     photos_added: List[str] = []
     if REFRESH_NO_PHOTO_DAILY:
@@ -991,14 +991,40 @@ def main() -> None:
 
             # Photos actuellement disponibles sur le site Kennebec
             current_photos = v.get("photos") or []
+            nb_kennebec = len(current_photos)
 
-            # Méthode 1: Vérifier le champ no_photo (set par FIX #1)
+            # Pas de photos sur Kennebec → rien à faire
+            if nb_kennebec == 0:
+                continue
+
+            # Photo count stocké en DB (ce qu'on avait lors de la publication FB)
+            photo_count_db = post_data.get("photo_count", None)
             has_no_photo_flag = post_data.get("no_photo", None)
 
-            # Méthode 2: Vérifier photo_count == 0
-            photo_count_db = post_data.get("photo_count", None)
+            # ── Méthode 5 (PRINCIPALE): Comparer photos FB vs Kennebec ──
+            # Si FB a 0 ou 1 photo ET Kennebec a > 1 → c'est un NO_PHOTO à updater
+            if isinstance(photo_count_db, int) and photo_count_db <= 1 and nb_kennebec > 1:
+                photos_added.append(slug)
+                print(
+                    f"[PHOTOS_ADDED DETECT] slug={slug} "
+                    f"fb_photos={photo_count_db} kennebec_photos={nb_kennebec} "
+                    f"method=FB_VS_KENNEBEC",
+                    flush=True,
+                )
+                continue
 
-            # Méthode 3: Vérifier si le base_text contient des indices de "no photo"
+            # ── Méthode 1: Flag no_photo explicite ──
+            if has_no_photo_flag is True:
+                photos_added.append(slug)
+                print(
+                    f"[PHOTOS_ADDED DETECT] slug={slug} "
+                    f"no_photo_flag=True kennebec_photos={nb_kennebec} "
+                    f"method=NO_PHOTO_FLAG",
+                    flush=True,
+                )
+                continue
+
+            # ── Méthode 2: Indices texte dans le base_text ──
             base_text = (post_data.get("base_text") or "").lower()
             text_has_no_photo_hint = (
                 "photos suivront" in base_text or
@@ -1009,54 +1035,41 @@ def main() -> None:
                 "photo à venir" in base_text or
                 "photos à venir" in base_text
             )
-
-            # Méthode 4 (NEW): Vérifier photo_count == 1 avec no_photo == True
-            # Ceci attrape les posts créés avec le fallback NO_PHOTO corrigé par FIX #1
-            is_no_photo_post = False
-
-            if has_no_photo_flag is True:
-                is_no_photo_post = True
-            elif photo_count_db == 0:
-                is_no_photo_post = True
-            elif text_has_no_photo_hint:
-                is_no_photo_post = True
-            elif photo_count_db is None and has_no_photo_flag is None:
-                # Anciennes entrées sans ces champs - on vérifie le texte
-                # ET on vérifie aussi si le post n'a qu'une seule photo (potentiel fallback)
-                if text_has_no_photo_hint:
-                    is_no_photo_post = True
-
-            # Si le post est identifié comme "no photo" ET qu'il y a maintenant des photos disponibles
-            if is_no_photo_post and len(current_photos) > 0:
-                # Protection anti-boucle: si photo_count=0 mais no_photo=False et pas de hint texte,
-                # c'est probablement un ancien post mal migré — vérifier que le post n'a pas déjà été
-                # mis à jour récemment (dans les dernières 24h)
-                if photo_count_db == 0 and has_no_photo_flag is False and not text_has_no_photo_hint:
-                    last_updated = post_data.get("last_updated_at") or ""
-                    if last_updated:
-                        try:
-                            from datetime import datetime as _dt, timezone as _tz
-                            upd = _dt.fromisoformat(last_updated.replace("Z", "+00:00"))
-                            hours_ago = (datetime.now(_tz.utc) - upd).total_seconds() / 3600
-                            if hours_ago < 24:
-                                # Mis à jour il y a moins de 24h avec photo_count=0 mais no_photo=False
-                                # → probablement un ancien post, on corrige silencieusement le photo_count
-                                print(
-                                    f"[PHOTOS_ADDED SKIP] slug={slug} photo_count=0 but no_photo=False "
-                                    f"and updated {hours_ago:.1f}h ago — skipping to avoid loop",
-                                    flush=True,
-                                )
-                                continue
-                        except Exception:
-                            pass
-
+            if text_has_no_photo_hint:
                 photos_added.append(slug)
                 print(
                     f"[PHOTOS_ADDED DETECT] slug={slug} "
-                    f"no_photo_flag={has_no_photo_flag} photo_count={photo_count_db} "
-                    f"text_hint={text_has_no_photo_hint} current_photos={len(current_photos)}",
+                    f"kennebec_photos={nb_kennebec} "
+                    f"method=TEXT_HINT",
                     flush=True,
                 )
+                continue
+
+            # ── Méthode 3: Anciennes entrées sans photo_count (NULL en DB) ──
+            # Si photo_count est NULL et le post existe → vérifier si Kennebec a beaucoup de photos
+            if photo_count_db is None and nb_kennebec > 5:
+                # Probablement un ancien post sans tracking → vérifier le post n'a pas été
+                # mis à jour récemment pour éviter une boucle
+                last_updated = post_data.get("last_updated_at") or post_data.get("published_at") or ""
+                skip_this = False
+                if last_updated:
+                    try:
+                        from datetime import datetime as _dt, timezone as _tz
+                        upd = _dt.fromisoformat(last_updated.replace("Z", "+00:00"))
+                        hours_ago = (datetime.now(_tz.utc) - upd).total_seconds() / 3600
+                        if hours_ago < 48:
+                            skip_this = True
+                    except Exception:
+                        pass
+
+                if not skip_this:
+                    photos_added.append(slug)
+                    print(
+                        f"[PHOTOS_ADDED DETECT] slug={slug} "
+                        f"photo_count=NULL kennebec_photos={nb_kennebec} "
+                        f"method=NULL_COUNT_MANY_PHOTOS",
+                        flush=True,
+                    )
 
     print(f"[REFRESH_NO_PHOTO] {len(photos_added)} posts à mettre à jour avec photos (limit={REFRESH_NO_PHOTO_LIMIT})", flush=True)
 

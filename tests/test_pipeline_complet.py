@@ -494,12 +494,11 @@ https://www.chrysler.com/hostd/windowsticker/getWindowStickerPdf.do?vin=ZACPDFDW
 # 7. NO_PHOTO DETECTION
 # ============================================================
 def test_no_photo():
-    section("7. DETECTION NO_PHOTO")
+    section("7. DETECTION NO_PHOTO (FB vs KENNEBEC)")
 
-    # _is_no_photo_fallback
     from pathlib import Path
 
-    # Simule des chemins de photos
+    # _is_no_photo_fallback
     real_photos = [Path("/tmp/test_06174_01.jpg"), Path("/tmp/test_06174_02.jpg")]
     no_photo = [Path("/tmp/test_06174_NO_PHOTO.jpg")]
     empty = []
@@ -515,54 +514,79 @@ def test_no_photo():
     test("NO_PHOTO = fallback detecte", _is_no_photo_fallback(no_photo))
     test("Vide = pas fallback", not _is_no_photo_fallback(empty))
 
-    # Detection PHOTOS_ADDED
-    def simulate_photos_added_detect(post_data, current_photos):
-        has_no_photo_flag = post_data.get("no_photo", None)
+    # ── Nouvelle logique: FB vs Kennebec ──
+    def simulate_photos_added(post_data, kennebec_photos):
+        """Simule la detection PHOTOS_ADDED comme dans runner_cron_prod.py"""
+        nb_kennebec = len(kennebec_photos)
+        if nb_kennebec == 0:
+            return False, "no_kennebec_photos"
+
         photo_count_db = post_data.get("photo_count", None)
-        base_text = (post_data.get("base_text") or "").lower()
-        text_has_no_photo_hint = (
-            "photos suivront" in base_text or
-            "photo non disponible" in base_text or
-            "no_photo" in base_text or
-            "sans photo" in base_text
-        )
+        has_no_photo_flag = post_data.get("no_photo", None)
 
-        is_no_photo_post = False
+        # Methode 5: FB photos <= 1 ET Kennebec > 1
+        if isinstance(photo_count_db, int) and photo_count_db <= 1 and nb_kennebec > 1:
+            return True, "FB_VS_KENNEBEC"
+
+        # Methode 1: Flag no_photo
         if has_no_photo_flag is True:
-            is_no_photo_post = True
-        elif photo_count_db == 0:
-            is_no_photo_post = True
-        elif text_has_no_photo_hint:
-            is_no_photo_post = True
+            return True, "NO_PHOTO_FLAG"
 
-        return is_no_photo_post and len(current_photos) > 0
+        # Methode 2: Text hints
+        base_text = (post_data.get("base_text") or "").lower()
+        if "photos suivront" in base_text or "sans photo" in base_text:
+            return True, "TEXT_HINT"
 
-    # Cas 1: no_photo=True, maintenant des photos dispo
-    test(
-        "PHOTOS_ADDED: no_photo=True + photos dispo",
-        simulate_photos_added_detect(
-            {"no_photo": True, "photo_count": 0, "base_text": "Photos suivront"},
-            ["photo1.jpg", "photo2.jpg"]
-        )
+        return False, "no_match"
+
+    # Cas 1: FB a 1 photo, Kennebec a 25 → TRIGGER
+    triggered, method = simulate_photos_added(
+        {"photo_count": 1, "no_photo": False, "base_text": "Annonce normale"},
+        [f"photo_{i}.jpg" for i in range(25)]
     )
+    test("FB=1 photo, Kennebec=25 → TRIGGER", triggered, f"method={method}")
 
-    # Cas 2: post normal avec photos - pas de trigger
-    test(
-        "Pas de trigger: post normal avec photos",
-        not simulate_photos_added_detect(
-            {"no_photo": False, "photo_count": 15, "base_text": "Belle annonce complete"},
-            ["photo1.jpg"]
-        )
+    # Cas 2: FB a 0 photos, Kennebec a 30 → TRIGGER
+    triggered, method = simulate_photos_added(
+        {"photo_count": 0, "no_photo": False, "base_text": "Annonce"},
+        [f"photo_{i}.jpg" for i in range(30)]
     )
+    test("FB=0 photos, Kennebec=30 → TRIGGER", triggered, f"method={method}")
 
-    # Cas 3: photo_count=0 (ancien post mal migre)
-    test(
-        "PHOTOS_ADDED: photo_count=0 (ancien)",
-        simulate_photos_added_detect(
-            {"no_photo": None, "photo_count": 0, "base_text": "Annonce"},
-            ["photo1.jpg"]
-        )
+    # Cas 3: FB a 15 photos, Kennebec a 25 → PAS de trigger
+    triggered, method = simulate_photos_added(
+        {"photo_count": 15, "no_photo": False, "base_text": "Annonce complete"},
+        [f"photo_{i}.jpg" for i in range(25)]
     )
+    test("FB=15 photos, Kennebec=25 → PAS de trigger", not triggered, f"method={method}")
+
+    # Cas 4: no_photo=True, Kennebec a des photos → TRIGGER
+    triggered, method = simulate_photos_added(
+        {"photo_count": 0, "no_photo": True, "base_text": "Photos suivront"},
+        [f"photo_{i}.jpg" for i in range(20)]
+    )
+    test("no_photo=True + photos dispo → TRIGGER", triggered, f"method={method}")
+
+    # Cas 5: Kennebec a 0 photos → PAS de trigger
+    triggered, method = simulate_photos_added(
+        {"photo_count": 0, "no_photo": True, "base_text": "Sans photo"},
+        []
+    )
+    test("Kennebec=0 → PAS de trigger", not triggered, f"method={method}")
+
+    # Cas 6: Text hint "photos suivront" + photos dispo → TRIGGER
+    triggered, method = simulate_photos_added(
+        {"photo_count": None, "no_photo": None, "base_text": "Photos suivront bientot"},
+        [f"photo_{i}.jpg" for i in range(10)]
+    )
+    test("Text hint + photos dispo → TRIGGER", triggered, f"method={method}")
+
+    # Cas 7: FB a 10 photos, Kennebec a 10 → PAS de trigger
+    triggered, method = simulate_photos_added(
+        {"photo_count": 10, "no_photo": False, "base_text": "Belle annonce"},
+        [f"photo_{i}.jpg" for i in range(10)]
+    )
+    test("FB=10, Kennebec=10 → PAS de trigger", not triggered, f"method={method}")
 
 
 # ============================================================
