@@ -586,8 +586,11 @@ def _humanize_sticker_text(
         "   ▫️ = sous-options en minuscules, en retrait\n"
         "   NE SUPPRIME AUCUNE LIGNE. Chaque ✅ et ▫️ doit rester.\n"
         "   Traduis les noms techniques en francais lisible.\n\n"
-        "4. TOUT apres le lien sticker (footer, Daniel Giroux, hashtags) = COPIE EXACTE.\n\n"
-        "NE RAJOUTE RIEN a la fin."
+        "4. NE DUPLIQUE PAS les sections (echanges, footer, hashtags).\n"
+        "   Si la section 'J'accepte les echanges' est deja presente, NE LA REPETE PAS.\n"
+        "   Le footer avec Daniel Giroux et les hashtags sera ajoute automatiquement.\n\n"
+        "NE RAJOUTE RIEN a la fin. Pas de footer, pas de hashtags, pas de coordonnees.\n"
+        "Termine apres la derniere option ou le lien Window Sticker."
     )
 
     user_prompt = f"Humanise cette annonce:\n\n{raw_text}"
@@ -734,14 +737,14 @@ def _build_ad_text(
     # ══════════════════════════════════════════════════════════════
     if USE_AI and sticker_raw_text and generate_smart_text_v3 is not None:
         try:
-            # Ajouter le footer au texte brut avant humanisation
-            raw_with_footer = _ensure_contact_footer(sticker_raw_text)
-
-            # Humaniser le texte sticker complet via llm_v3
+            # NE PAS ajouter de footer avant l'IA (cause de double footer)
+            # L'IA voit le texte brut et produit son propre texte
             humanized = _humanize_sticker_text(
-                raw_with_footer, v_ai, event, vin_specs_text
+                sticker_raw_text, v_ai, event, vin_specs_text
             )
             if humanized and len(humanized) >= MIN_POST_TEXT_LEN:
+                # Ajouter le footer APRÈS humanisation si absent
+                humanized = _ensure_contact_footer(humanized)
                 print(f"[STICKER+AI OK] slug={slug} stock={stock} chars={len(humanized)}", flush=True)
                 return humanized
             elif humanized:
