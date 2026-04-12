@@ -158,6 +158,40 @@ def _is_stellantis_vin(vin: str) -> bool:
     vin = (vin or "").strip().upper()
     return len(vin) == 17 and vin.startswith(("1C", "2C", "3C", "ZAC", "ZFA"))
 
+# Table de décodage année VIN (position 10, index 9)
+_VIN_YEAR_MAP = {
+    "J": 2018, "K": 2019, "L": 2020, "M": 2021,
+    "N": 2022, "P": 2023, "R": 2024, "S": 2025, "T": 2026,
+    "V": 2027, "W": 2028, "X": 2029, "Y": 2030,
+    # Aussi les années plus anciennes
+    "A": 2010, "B": 2011, "C": 2012, "D": 2013,
+    "E": 2014, "F": 2015, "G": 2016, "H": 2017,
+}
+
+def _extract_year(v: Dict[str, Any]) -> int:
+    """Extrait l'année du véhicule depuis le titre ou le VIN."""
+    # Méthode 1: Titre (ex: "Dodge Hornet 2024")
+    title = (v.get("title") or "").strip()
+    import re as _re
+    m = _re.search(r"\b(20[12]\d)\b", title)
+    if m:
+        return int(m.group(1))
+    # Méthode 2: VIN position 10 (index 9)
+    vin = (v.get("vin") or "").strip().upper()
+    if len(vin) >= 10:
+        yr_char = vin[9]
+        if yr_char in _VIN_YEAR_MAP:
+            return _VIN_YEAR_MAP[yr_char]
+    return 0
+
+def _is_stellantis_2018_plus(v: Dict[str, Any]) -> bool:
+    """Retourne True si le véhicule est Stellantis ET année >= 2018."""
+    vin = (v.get("vin") or "").strip().upper()
+    if not _is_stellantis_vin(vin):
+        return False
+    year = _extract_year(v)
+    return year >= 2018
+
 def _norm_text(value: Any, suffix: str = "") -> str:
     if value is None:
         return ""
@@ -636,7 +670,10 @@ def _build_ad_text(
     # ── Récupérer le texte des options sticker pour Stellantis ──
     sticker_raw_text = ""
     sticker_options_text = ""
-    if USE_STICKER_AD and _is_stellantis_vin(vin):
+    is_stellantis = _is_stellantis_vin(vin)
+    is_forced_sticker = _is_stellantis_2018_plus(v)  # 2018+ = FORCER le PDF
+    
+    if USE_STICKER_AD and is_stellantis:
         # D'abord, essayer de récupérer le sticker déjà en base (base_text du post existant)
         existing_sticker = ""
         try:
@@ -680,7 +717,11 @@ def _build_ad_text(
                 else:
                     print(f"[STICKER NO OPTIONS] slug={slug} vin={vin} pdf_size={len(pdf_bytes)} - extraction returned 0 groups", flush=True)
             else:
-                print(f"[STICKER UNAVAIL] slug={slug} vin={vin} status={res.get('status')} reason={res.get('reason')}", flush=True)
+                reason = res.get('reason', 'unknown')
+                if is_forced_sticker:
+                    print(f"[STICKER FORCED MISS] slug={slug} vin={vin} year=2018+ status={res.get('status')} reason={reason} — PDF requis mais indisponible!", flush=True)
+                else:
+                    print(f"[STICKER UNAVAIL] slug={slug} vin={vin} status={res.get('status')} reason={reason}", flush=True)
         except Exception as e:
             print(f"[STICKER FETCH] slug={slug} vin={vin} err={e}", flush=True)
 
@@ -886,6 +927,44 @@ def main() -> None:
     if not current:
         print("[WARN] No vehicles parsed. Abort.", flush=True)
         return
+
+    # =========================================================
+    # PRÉ-CACHE: Forcer le téléchargement des PDFs Stellantis 2018+
+    # =========================================================
+    stellantis_2018_vins = []
+    for slug, v in current.items():
+        if _is_stellantis_2018_plus(v):
+            vin = (v.get("vin") or "").strip().upper()
+            if vin and len(vin) == 17:
+                stellantis_2018_vins.append((slug, vin))
+
+    if stellantis_2018_vins:
+        print(f"[STICKER PRECACHE] {len(stellantis_2018_vins)} véhicules Stellantis 2018+ détectés, vérification des PDFs...", flush=True)
+        cached_ok = 0
+        cached_new = 0
+        cached_fail = 0
+        for slug, vin in stellantis_2018_vins:
+            try:
+                res = ensure_sticker_cached(sb, vin, run_id)
+                status = (res.get("status") or "").lower()
+                source = res.get("source", "")
+                if status == "ok":
+                    if source == "cache_ok":
+                        cached_ok += 1
+                    else:
+                        cached_new += 1
+                        print(f"[STICKER PRECACHE NEW] vin={vin} slug={slug} source={source}", flush=True)
+                else:
+                    cached_fail += 1
+                    print(f"[STICKER PRECACHE FAIL] vin={vin} slug={slug} reason={res.get('reason')}", flush=True)
+            except Exception as e:
+                cached_fail += 1
+                print(f"[STICKER PRECACHE ERROR] vin={vin} slug={slug} err={e}", flush=True)
+        print(
+            f"[STICKER PRECACHE DONE] total={len(stellantis_2018_vins)} "
+            f"cache_hit={cached_ok} new_download={cached_new} fail={cached_fail}",
+            flush=True,
+        )
 
     new_slugs = [s for s in current if s not in inv_db]
 
