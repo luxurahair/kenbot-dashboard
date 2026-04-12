@@ -1028,6 +1028,28 @@ def main() -> None:
 
             # Si le post est identifié comme "no photo" ET qu'il y a maintenant des photos disponibles
             if is_no_photo_post and len(current_photos) > 0:
+                # Protection anti-boucle: si photo_count=0 mais no_photo=False et pas de hint texte,
+                # c'est probablement un ancien post mal migré — vérifier que le post n'a pas déjà été
+                # mis à jour récemment (dans les dernières 24h)
+                if photo_count_db == 0 and has_no_photo_flag is False and not text_has_no_photo_hint:
+                    last_updated = post_data.get("last_updated_at") or ""
+                    if last_updated:
+                        try:
+                            from datetime import datetime as _dt, timezone as _tz
+                            upd = _dt.fromisoformat(last_updated.replace("Z", "+00:00"))
+                            hours_ago = (datetime.now(_tz.utc) - upd).total_seconds() / 3600
+                            if hours_ago < 24:
+                                # Mis à jour il y a moins de 24h avec photo_count=0 mais no_photo=False
+                                # → probablement un ancien post, on corrige silencieusement le photo_count
+                                print(
+                                    f"[PHOTOS_ADDED SKIP] slug={slug} photo_count=0 but no_photo=False "
+                                    f"and updated {hours_ago:.1f}h ago — skipping to avoid loop",
+                                    flush=True,
+                                )
+                                continue
+                        except Exception:
+                            pass
+
                 photos_added.append(slug)
                 print(
                     f"[PHOTOS_ADDED DETECT] slug={slug} "
