@@ -61,50 +61,58 @@ def sb_query(table, select="*", filters=None, order=None, limit=None, count=Fals
 # ─── Changelog ───
 CHANGELOG = [
     {
+        "version": "4.0.0",
+        "date": "2026-04-12",
+        "type": "feature",
+        "title": "Refonte detection par STOCK + UNSOLD + SEO + Cleanup",
+        "changes": [
+            {"severity": "critical", "description": "Toutes les comparaisons (SOLD, PRICE_CHANGED, PHOTOS_ADDED) utilisent maintenant le STOCK comme cle primaire au lieu du slug", "file": "runner_cron_prod.py"},
+            {"severity": "critical", "description": "Nouveau event UNSOLD: restaure automatiquement les posts marques VENDU par erreur si le stock est encore sur Kennebec", "file": "runner_cron_prod.py"},
+            {"severity": "critical", "description": "Detection NO_PHOTO par comparaison FB vs Kennebec (fb_photos <= 1 ET kennebec > 1)", "file": "runner_cron_prod.py"},
+            {"severity": "critical", "description": "FIX publish_with_photos inexistant — remplace par publish_photos_unpublished + create_post_with_attached_media", "file": "runner_cron_prod.py"},
+            {"severity": "critical", "description": "FIX double footer — ad_builder.py ne rajoute plus les echanges, footer_utils.py est l'unique source", "file": "ad_builder.py"},
+            {"severity": "medium", "description": "Cleanup automatique: a chaque cron, corrige les posts FB existants avec double footer (max 10/run)", "file": "runner_cron_prod.py"},
+            {"severity": "medium", "description": "Hashtags SEO dynamiques par vehicule (#DodgeHornet2024 #Beauce #SaintGeorges #Pickup etc.)", "file": "runner_cron_prod.py"},
+            {"severity": "medium", "description": "Intro PRICE_CHANGED amelioree: affiche le montant du rabais (ex: 2 000 $ DE RABAIS)", "file": "runner_cron_prod.py"},
+            {"severity": "medium", "description": "Prix fallback depuis inventory DB si le scrape ne trouve pas le prix", "file": "runner_cron_prod.py"},
+            {"severity": "low", "description": "Protection anti-boucle SOLD: cooldown 3 jours, verification par stock", "file": "runner_cron_prod.py"},
+        ]
+    },
+    {
+        "version": "3.5.0",
+        "date": "2026-04-12",
+        "type": "feature",
+        "title": "Pre-cache PDFs Stellantis 2018+ + VIN strict 17 chars",
+        "changes": [
+            {"severity": "critical", "description": "Pre-cache obligatoire: au debut du cron, telecharge/verifie les PDFs sticker pour TOUS les Stellantis 2018+", "file": "runner_cron_prod.py"},
+            {"severity": "medium", "description": "ensure_sticker_cached retourne pdf_bytes directement (plus de double telechargement)", "file": "runner_cron_prod.py"},
+            {"severity": "medium", "description": "upsert_sticker_pdf isole dans try/except (FK ne casse plus le return)", "file": "runner_cron_prod.py"},
+            {"severity": "medium", "description": "upsert_scrape_run() execute AVANT le pre-cache (corrige FK sticker_pdfs_run_id_fkey)", "file": "runner_cron_prod.py"},
+            {"severity": "low", "description": "VIN decode strictement 17 caracteres (plus de faux positifs)", "file": "vin_decoder.py"},
+        ]
+    },
+    {
+        "version": "3.2.0",
+        "date": "2026-04-12",
+        "type": "bugfix",
+        "title": "FIX upsert_post duplicate key + suppression photos commentaires",
+        "changes": [
+            {"severity": "critical", "description": "upsert_post: on_conflict passe de 'stock' a 'slug' (PK) avec fallback update 3 niveaux", "file": "supabase_db.py"},
+            {"severity": "critical", "description": "publish_photos_as_comment_batch supprime (causait 403 FB). Max 10 photos par post, pas de commentaires.", "file": "runner_cron_prod.py"},
+            {"severity": "medium", "description": "Double appel _build_ad_text dans PHOTOS_ADDED corrige: reutilise msg deja genere", "file": "runner_cron_prod.py"},
+        ]
+    },
+    {
         "version": "3.0.0",
         "date": "2026-04-11",
         "type": "feature",
         "title": "AI v3.0 — Generation intelligente par vehicule",
         "changes": [
             {"severity": "critical", "description": "Nouveau moteur de texte llm_v3.py: prompts adaptes par type de vehicule (muscle_car, off_road, suv_premium, pickup, etc.)", "file": "llm_v3.py"},
-            {"severity": "critical", "description": "Module vehicle_intelligence.py: parsing titre, detection marque/modele/trim, specs moteur (HP, engine), base 20+ marques", "file": "vehicle_intelligence.py"},
-            {"severity": "medium", "description": "5 styles d'intro aleatoires (direct, storytelling, question, expertise, opportunite)", "file": "llm_v3.py"},
-            {"severity": "medium", "description": "Filtre anti-cliches ameliore: 'routes de la Beauce', 'paysages beauceron' etc.", "file": "llm_v3.py"},
-            {"severity": "low", "description": "Teste avec succes sur 5 vrais vehicules: Mustang GT (V8 450HP), Wrangler Rubicon 4XE, Malibu LT, Civic EX, Grand Cherokee Summit", "file": "server.py"},
-            {"severity": "critical", "description": "llm_v3 integre dans runner_cron_prod.py: Priorite 1 = llm_v3, Priorite 2 = sticker_to_ad, Priorite 3 = text_engine", "file": "runner_cron_prod.py"},
-        ]
-    },
-    {
-        "version": "2.2.0",
-        "date": "2026-04-11",
-        "type": "feature",
-        "title": "Audit Variables Environnement Render vs Code",
-        "changes": [
-            {"severity": "medium", "description": "30 variables Render correctement mappees au code", "file": "AUDIT_ENV_VARIABLES.md"},
-            {"severity": "medium", "description": "9 variables Render orphelines identifiees (jamais lues par le code)", "file": "AUDIT_ENV_VARIABLES.md"},
-            {"severity": "low", "description": "~20 variables du code absentes de Render (avec bons defaults)", "file": "AUDIT_ENV_VARIABLES.md"},
-        ]
-    },
-    {
-        "version": "2.1.0",
-        "date": "2026-04-11",
-        "type": "bugfix",
-        "title": "FIX PHOTOS_ADDED - 3 bugs corriges",
-        "changes": [
-            {"severity": "critical", "description": "Flag no_photo jamais mis a True lors de la creation d'un post NEW avec fallback NO_PHOTO", "fix": "Nouvelle fonction _is_no_photo_fallback() + no_photo=True / photo_count=0 quand fallback utilise", "file": "runner_cron_prod.py", "line": "~380"},
-            {"severity": "critical", "description": "Mauvais ordre d'arguments _build_ad_text(sb, v, 'NEW', run_id) dans PHOTOS_ADDED", "fix": "Corrige en _build_ad_text(sb, run_id, slug, v, 'NEW')", "file": "runner_cron_prod.py", "line": "~310"},
-            {"severity": "medium", "description": "Detection 'no photo' trop restrictive - mots-cles manquants dans base_text", "fix": "Ajout de mots-cles: 'sans photo', 'photo a venir', 'photos a venir', 'no_photo'", "file": "runner_cron_prod.py", "line": "~250"},
-        ]
-    },
-    {
-        "version": "2.0.0",
-        "date": "2026-04-08",
-        "type": "feature",
-        "title": "AI v2.0 + Fix double footer + Cliches interdits",
-        "changes": [
-            {"severity": "medium", "description": "Textes plus longs (400 chars au lieu de 220)", "file": "llm.py"},
-            {"severity": "medium", "description": "Liste de cliches INTERDITS (sillonner la Beauce, etc.)", "file": "llm.py"},
-            {"severity": "low", "description": "Footer centralise via footer_utils.py", "file": "footer_utils.py"},
+            {"severity": "critical", "description": "Module vehicle_intelligence.py: parsing titre, detection marque/modele/trim, specs moteur (HP, engine), base 27 marques, 43 modeles, 194 trims", "file": "vehicle_intelligence.py"},
+            {"severity": "critical", "description": "Decodage VIN via NHTSA API (vin_decoder.py): moteur, HP, transmission, 4WD, places, securite", "file": "vin_decoder.py"},
+            {"severity": "medium", "description": "Humanisation sticker Stellantis: intro AI + options ✅ MAJUSCULES / ▫️ minuscules preservees", "file": "runner_cron_prod.py"},
+            {"severity": "medium", "description": "Detection et marquage SOLD sur Facebook (🚨 VENDU 🚨)", "file": "runner_cron_prod.py"},
         ]
     },
 ]
@@ -112,35 +120,46 @@ CHANGELOG = [
 # ─── Architecture ───
 ARCHITECTURE = {
     "components": [
-        {"id": "website", "name": "Site Kennebec", "type": "external", "description": "kennebecdodge.ca - Source inventaire"},
-        {"id": "scraper", "name": "kennebec_scrape.py", "type": "module", "description": "Scraping HTML + parsing vehicules"},
-        {"id": "runner", "name": "runner_cron_prod.py", "type": "core", "description": "Chef d'orchestre - Pipeline principal"},
-        {"id": "supabase", "name": "Supabase", "type": "storage", "description": "Tables: inventory, posts, events + Storage"},
-        {"id": "text_engine", "name": "Text Engine", "type": "service", "description": "Generation textes FB (externe + AI)"},
-        {"id": "sticker", "name": "sticker_to_ad.py", "type": "module", "description": "Extraction PDF Window Sticker"},
-        {"id": "llm", "name": "llm.py", "type": "module", "description": "AI OpenAI - Intros humanisees"},
-        {"id": "facebook", "name": "fb_api.py", "type": "external", "description": "Facebook Graph API - Publication"},
-        {"id": "meta_feed", "name": "Meta Feed", "type": "output", "description": "CSV feed pour Meta Ads"},
+        {"id": "website", "name": "Site Kennebec", "type": "external", "description": "kennebecdodge.ca — Source inventaire (3 pages scrappees)"},
+        {"id": "scraper", "name": "kennebec_scrape.py", "type": "module", "description": "Scraping HTML + extraction VIN + photos + prix"},
+        {"id": "runner", "name": "runner_cron_prod.py", "type": "core", "description": "Orchestrateur cron — Detection par STOCK: NEW / SOLD / UNSOLD / PRICE_CHANGED / PHOTOS_ADDED / CLEANUP"},
+        {"id": "supabase", "name": "Supabase PostgreSQL", "type": "storage", "description": "Tables: inventory, posts, events, scrape_runs, sticker_pdfs + Storage (PDFs, photos)"},
+        {"id": "vin_decoder", "name": "vin_decoder.py", "type": "module", "description": "Decodage VIN 17 chars via NHTSA API — moteur, HP, transmission, 4WD, places"},
+        {"id": "vehicle_intel", "name": "vehicle_intelligence.py", "type": "module", "description": "Base de connaissance: 27 marques, 43 modeles, 194 trims avec specs, vibe, ton marketing"},
+        {"id": "sticker", "name": "sticker_to_ad.py + ad_builder.py", "type": "module", "description": "Extraction PDF Window Sticker (Stellantis 2018+) → options ✅/▫️ structurees"},
+        {"id": "llm_v3", "name": "llm_v3.py", "type": "module", "description": "Generation IA GPT-4o — prompts adaptes par type vehicule, 5 styles d'intro, anti-cliches"},
+        {"id": "footer", "name": "footer_utils.py", "type": "module", "description": "Footer unique Daniel Giroux — echanges, telephone, hashtags SEO dynamiques"},
+        {"id": "facebook", "name": "fb_api.py", "type": "external", "description": "Facebook Graph API — publish, update, delete, fetch feed (max 10 photos/post)"},
+        {"id": "meta_feed", "name": "meta_compare_supabase.py", "type": "output", "description": "Rapport CSV: comparaison Meta FB vs site Kennebec"},
+        {"id": "dashboard", "name": "kenbot-dashboard", "type": "webapp", "description": "Dashboard React + FastAPI — Cockpit, Preview, Inventaire (Vercel + Render)"},
     ],
     "flows": [
-        {"from": "website", "to": "scraper", "label": "HTML pages"},
-        {"from": "scraper", "to": "runner", "label": "Vehicules normalises"},
-        {"from": "runner", "to": "supabase", "label": "State management"},
-        {"from": "runner", "to": "text_engine", "label": "Generation texte"},
-        {"from": "runner", "to": "sticker", "label": "PDF Stellantis"},
-        {"from": "sticker", "to": "runner", "label": "Options extraites"},
-        {"from": "llm", "to": "runner", "label": "Intro AI"},
-        {"from": "runner", "to": "facebook", "label": "Publish/Update"},
-        {"from": "runner", "to": "meta_feed", "label": "CSV export"},
+        {"from": "website", "to": "scraper", "label": "HTML 3 pages"},
+        {"from": "scraper", "to": "runner", "label": "47 vehicules + VIN + photos"},
+        {"from": "runner", "to": "supabase", "label": "Upsert inventory, posts, events"},
+        {"from": "runner", "to": "vin_decoder", "label": "VIN → NHTSA specs"},
+        {"from": "runner", "to": "vehicle_intel", "label": "Titre → marque/modele/trim"},
+        {"from": "runner", "to": "sticker", "label": "PDF Stellantis 2018+ → options"},
+        {"from": "runner", "to": "llm_v3", "label": "Specs + options → texte IA"},
+        {"from": "runner", "to": "footer", "label": "Texte → footer + hashtags SEO"},
+        {"from": "runner", "to": "facebook", "label": "Publish / Update / Delete"},
+        {"from": "runner", "to": "meta_feed", "label": "CSV meta_vs_site.csv"},
+        {"from": "supabase", "to": "dashboard", "label": "Live data"},
     ],
-    "states": ["NEW", "SOLD", "RESTORE", "PRICE_CHANGED", "PHOTOS_ADDED"]
+    "states": ["NEW", "SOLD", "UNSOLD", "PRICE_CHANGED", "PHOTOS_ADDED", "CLEANUP"],
+    "pipeline": {
+        "order": "UNSOLD → PHOTOS_ADDED → PRICE_CHANGED → NEW → SOLD → CLEANUP",
+        "comparison_key": "STOCK (pas slug)",
+        "sold_protection": "3 jours cooldown + verification stock Kennebec",
+        "sticker_precache": "38 Stellantis 2018+ au debut de chaque run",
+    }
 }
 
 # ─── Routes ───
 
 @api_router.get("/")
 async def root():
-    return {"message": "Kenbot Dashboard API", "version": "2.1.0", "supabase_connected": sb is not None}
+    return {"message": "Kenbot Dashboard API", "version": "4.0.0", "supabase_connected": sb is not None}
 
 @api_router.get("/system/status")
 async def get_system_status():
