@@ -99,24 +99,31 @@ def get_dealer_footer(
     hashtags: Optional[List[str]] = None,
 ) -> str:
     """
-    Génère la signature professionnelle Daniel Giroux.
-    Centrée sur Daniel comme marque personnelle, pas sur le site web.
+    Signature professionnelle Daniel Giroux — humaine, chaleureuse, experte.
     """
     lines = []
 
-    # Signature professionnelle
+    # Signature pro
     lines.append("━━━━━━━━━━━━━━━━━━━━")
-    lines.append(f"👤 {DEALER_NAME}")
-    lines.append(f"📋 {DEALER_TITLE} | Près de {DEALER_EXPERIENCE} d'expérience")
-    lines.append(f"🏢 {DEALER_DEALERSHIP} — {DEALER_LOCATION}")
-    lines.append(f"📞 Appelez-moi directement : {DEALER_PHONE}")
-    lines.append(f"💬 Écrivez-moi en privé sur Messenger — je réponds rapidement.")
+    lines.append("")
+    lines.append(f"🙋‍♂️ {DEALER_NAME}")
+    lines.append(f"🏆 {DEALER_TITLE} depuis près de {DEALER_EXPERIENCE}")
+    lines.append(f"🏢 {DEALER_DEALERSHIP}")
+    lines.append(f"📍 {DEALER_LOCATION}")
+    lines.append("")
+    lines.append(f"📞 {DEALER_PHONE} — appelez-moi, ça me fait plaisir!")
+    lines.append(f"💬 Ou écrivez-moi en privé ici sur Messenger")
     lines.append("")
 
     if include_echanges:
-        lines.append("🔁 J'accepte les échanges : 🚗 auto • 🏍️ moto • 🛥️ bateau • 🛻 VTT • 🏁 côte-à-côte")
-        lines.append("📸 Envoie-moi les photos + infos de ton véhicule (année / km / paiement restant) → je te reviens vite.")
+        lines.append("🔄 J'accepte les échanges :")
+        lines.append("🚗 Auto  🏍️ Moto  🛥️ Bateau  🛻 VTT  🏁 Côte-à-côte")
+        lines.append("📸 Envoyez-moi les photos + infos de votre véhicule")
+        lines.append("    (année, km, paiement restant) → je vous reviens rapidement!")
         lines.append("")
+
+    lines.append("🤝 Financement disponible — on trouve une solution ensemble.")
+    lines.append("")
 
     if include_hashtags:
         if hashtags:
