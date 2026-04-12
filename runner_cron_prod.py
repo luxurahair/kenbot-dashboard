@@ -1126,8 +1126,30 @@ def main() -> None:
             old_post_id = (old_post.get("post_id") or "").strip()
 
             if not old_post_id:
-                print(f"[PHOTOS_ADDED] no post_id for slug={slug}, skip", flush=True)
-                log_event(sb, slug, "PHOTOS_ADDED_SKIP_NO_POST", {"run_id": run_id})
+                # Post reseté (post_id vide) — publier comme un NEW
+                print(f"[PHOTOS_ADDED→NEW] no post_id for slug={slug}, publishing as NEW", flush=True)
+                photos = _download_photos(sb, stock, v.get("photos") or [], limit=MAX_PHOTOS)
+                if not photos:
+                    skipped_no_photos += 1
+                    continue
+                base_text = _build_ad_text(sb, run_id, slug, v, "NEW")
+                if not base_text or len(base_text) < MIN_POST_TEXT_LEN:
+                    skipped_bad_text += 1
+                    continue
+                try:
+                    new_post_id = publish_with_photos(FB_PAGE_ID, FB_TOKEN, base_text, photos[:POST_PHOTOS])
+                    upsert_post(sb, {
+                        "slug": slug, "post_id": new_post_id, "status": "ACTIVE",
+                        "published_at": now, "last_updated_at": now,
+                        "base_text": base_text, "no_photo": False,
+                        "photo_count": len(photos), "stock": stock,
+                    })
+                    posted += 1
+                    print(f"[NEW from reset] ✅ slug={slug} stock={stock} post_id={new_post_id} photos={len(photos)}", flush=True)
+                    log_event(sb, slug, "NEW_FROM_RESET", {"run_id": run_id, "post_id": new_post_id, "photo_count": len(photos)})
+                    time.sleep(max(1, SLEEP_BETWEEN))
+                except Exception as e:
+                    print(f"[ERROR NEW_RESET] slug={slug} err={e}", flush=True)
                 continue
 
             photos = _download_photos(sb, stock, v.get("photos") or [], limit=MAX_PHOTOS)

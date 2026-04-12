@@ -85,10 +85,20 @@ def upsert_post(sb: Client, row: Dict[str, Any]) -> None:
     row["stock"] = stock
     row["slug"] = slug or None
 
-    sb.table("posts").upsert(
-        row,
-        on_conflict="stock"
-    ).execute()
+    # Try upsert on stock first; if slug conflict, update by stock instead
+    try:
+        sb.table("posts").upsert(
+            row,
+            on_conflict="stock"
+        ).execute()
+    except Exception as e:
+        err_msg = str(e)
+        if "23505" in err_msg or "duplicate key" in err_msg.lower():
+            # Slug conflict — update existing row by stock
+            update_row = {k: v for k, v in row.items() if k != "slug"}
+            sb.table("posts").update(update_row).eq("stock", stock).execute()
+        else:
+            raise
 
 
 def get_posts_map(sb: Client) -> Dict[str, Dict[str, Any]]:
