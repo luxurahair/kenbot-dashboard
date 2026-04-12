@@ -20,7 +20,7 @@ def decode_vin(vin: str) -> Optional[Dict[str, Any]]:
     Retourne None si le VIN est invalide ou vide.
     """
     vin = (vin or "").strip().upper()
-    if len(vin) < 11:
+    if len(vin) != 17:
         return None
 
     if vin in _cache:
