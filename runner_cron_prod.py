@@ -263,6 +263,11 @@ def _is_no_photo_fallback(photos: List[Path]) -> bool:
 
 
 def ensure_sticker_cached(sb, vin: str, run_id: str) -> Dict[str, Any]:
+    """
+    Retourne {"status": "ok", "path": ..., "source": ..., "pdf_bytes": bytes}
+    ou {"status": "bad/skip", ...}
+    Les pdf_bytes sont inclus pour éviter un double téléchargement.
+    """
     vin = (vin or "").strip().upper()
     if len(vin) != 17:
         return {"status": "skip", "reason": "invalid_vin"}
@@ -270,28 +275,32 @@ def ensure_sticker_cached(sb, vin: str, run_id: str) -> Dict[str, Any]:
     ok_path = f"pdf_ok/{vin}.pdf"
     bad_path = f"pdf_bad/{vin}.pdf"
 
+    # 1. Vérifier le cache Supabase Storage (pdf_ok/)
     try:
         blob = sb.storage.from_(STICKERS_BUCKET).download(ok_path)
         if _is_pdf_ok(blob):
-            return {"status": "ok", "path": ok_path, "source": "cache_ok"}
-    except Exception:
-        pass
+            print(f"[PDF CACHE HIT] vin={vin} path={ok_path} size={len(blob)}", flush=True)
+            return {"status": "ok", "path": ok_path, "source": "cache_ok", "pdf_bytes": blob}
+    except Exception as e:
+        print(f"[PDF CACHE MISS] vin={vin} err={e}", flush=True)
 
+    # 2. Télécharger depuis Chrysler.com
     pdf_url = f"https://www.chrysler.com/hostd/windowsticker/getWindowStickerPdf.do?vin={vin}"
+
+    fetched = b""
+    source = ""
 
     # tentative simple requests
     try:
         r = SESSION.get(pdf_url, timeout=30)
         fetched = r.content or b""
         if _is_pdf_ok(fetched):
-            upload_bytes_to_storage(sb, STICKERS_BUCKET, ok_path, fetched, "application/pdf", True)
-            upsert_sticker_pdf(sb, vin=vin, status="ok", storage_path=ok_path, data=fetched, reason="", run_id=run_id)
-            return {"status": "ok", "path": ok_path, "source": "requests"}
+            source = "requests"
     except Exception as e:
         print(f"[PDF] requests failed vin={vin} err={e}", flush=True)
 
-    # fallback playwright si dispo
-    if sync_playwright is not None:
+    # fallback playwright si requests a échoué
+    if not source and sync_playwright is not None:
         for attempt in range(1, 4):
             try:
                 with sync_playwright() as p:
@@ -315,16 +324,31 @@ def ensure_sticker_cached(sb, vin: str, run_id: str) -> Dict[str, Any]:
                     browser.close()
 
                     if _is_pdf_ok(fetched):
-                        upload_bytes_to_storage(sb, STICKERS_BUCKET, ok_path, fetched, "application/pdf", True)
-                        upsert_sticker_pdf(sb, vin=vin, status="ok", storage_path=ok_path, data=fetched, reason="", run_id=run_id)
-                        return {"status": "ok", "path": ok_path, "source": f"playwright_attempt_{attempt}"}
+                        source = f"playwright_attempt_{attempt}"
+                        break
             except Exception as e:
                 print(f"[PDF] Playwright attempt {attempt} failed vin={vin}: {e}", flush=True)
                 time.sleep(random.uniform(2, 5))
 
-    # cache bad pour éviter marteler Chrysler à chaque run
+    # 3. Si on a un PDF valide, le sauvegarder
+    if source and _is_pdf_ok(fetched):
+        try:
+            upload_bytes_to_storage(sb, STICKERS_BUCKET, ok_path, fetched, "application/pdf", True)
+        except Exception as e:
+            print(f"[PDF] upload storage failed vin={vin}: {e}", flush=True)
+        # upsert_sticker_pdf séparé pour éviter que FK casse le return
+        try:
+            upsert_sticker_pdf(sb, vin=vin, status="ok", storage_path=ok_path, data=fetched, reason="", run_id=run_id)
+        except Exception as e:
+            print(f"[PDF] upsert_sticker_pdf failed vin={vin}: {e} (non-bloquant)", flush=True)
+        return {"status": "ok", "path": ok_path, "source": source, "pdf_bytes": fetched}
+
+    # 4. Marquer comme bad (mais NE PAS écraser un pdf_ok existant)
     try:
         upload_bytes_to_storage(sb, STICKERS_BUCKET, bad_path, b"invalid", "application/octet-stream", True)
+    except Exception:
+        pass
+    try:
         upsert_sticker_pdf(sb, vin=vin, status="bad", storage_path=bad_path, data=b"invalid", reason="fetch_failed", run_id=run_id)
     except Exception:
         pass
@@ -624,11 +648,16 @@ def _build_ad_text(
         except Exception:
             pass
 
-        # Essayer de télécharger le PDF frais
+        # Récupérer le PDF (cache Supabase ou Chrysler.com)
         try:
             res = ensure_sticker_cached(sb, vin, run_id)
             if (res.get("status") or "").lower() == "ok":
-                pdf_bytes = sb.storage.from_(STICKERS_BUCKET).download(res["path"])
+                # Utiliser les bytes retournés directement (évite double téléchargement)
+                pdf_bytes = res.get("pdf_bytes") or b""
+                if not pdf_bytes:
+                    # Fallback: re-télécharger si les bytes ne sont pas dans la réponse
+                    pdf_bytes = sb.storage.from_(STICKERS_BUCKET).download(res["path"])
+                
                 options = _extract_options_from_sticker_bytes(pdf_bytes)
                 if options:
                     opt_lines = []
@@ -647,6 +676,11 @@ def _build_ad_text(
                         options=options,
                         vehicle_url=url,
                     )
+                    print(f"[STICKER OK] slug={slug} vin={vin} options={len(options)} groups, text={len(sticker_raw_text)} chars", flush=True)
+                else:
+                    print(f"[STICKER NO OPTIONS] slug={slug} vin={vin} pdf_size={len(pdf_bytes)} - extraction returned 0 groups", flush=True)
+            else:
+                print(f"[STICKER UNAVAIL] slug={slug} vin={vin} status={res.get('status')} reason={res.get('reason')}", flush=True)
         except Exception as e:
             print(f"[STICKER FETCH] slug={slug} vin={vin} err={e}", flush=True)
 
