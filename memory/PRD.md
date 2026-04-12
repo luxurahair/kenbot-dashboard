@@ -1,120 +1,72 @@
-# PRD — Kenbot Dashboard + Fix + Intelligence Vehicule
+# PRD — Kenbot Dashboard + Bot Intelligence
 
-## Date: 2026-04-11
+## Date: 2026-04-12
 
-## Ce qui a ete fait
+## Ce qui a été fait
 
 ### Session 1 - Fix PHOTOS_ADDED
-- 3 bugs corriges dans runner_cron_prod.py (pousse sur GitHub)
-- Dashboard admin cree avec React + FastAPI
+- 3 bugs corrigés dans runner_cron_prod.py (poussé sur GitHub)
+- Dashboard admin créé avec React + FastAPI
 
 ### Session 2 - Dashboard Supabase Live
-- Dashboard connecte aux vraies donnees Supabase
+- Dashboard connecté aux vraies données Supabase
 - 6 onglets: Dashboard, Inventaire, Posts FB, Events, Architecture, Changelog
 - Bouton "Run Cron" avec options (Dry Run, Max targets, Force stock)
-- Colonnes no_photo et photo_count ajoutees dans Supabase
 
-### Session 3 - Intelligence Vehicule (EN COURS)
-- Module vehicle_intelligence.py cree avec:
-  - Base de connaissance 20+ marques (Dodge, Jeep, Ram, Ford, Toyota, etc.)
-  - Specs par modele (Challenger, Wrangler, Ram 1500, Mustang, etc.)
-  - Specs par trim (Scat Pack=485HP, Rubicon=off-road, GT=V8 Coyote, etc.)
-  - Parse automatique du titre -> brand/model/trim/year
-  - Description intelligente KM et prix
-- Module llm_v3.py cree avec:
-  - System prompt Daniel Giroux (vendeur quebecois authentique)
-  - Prompts specifiques par type de vehicule
-  - 5 styles d'intro aleatoires (direct, storytelling, question, expertise, opportunite)
-  - Filtre anti-cliches post-generation
-  - Options du sticker humanisees
-- API endpoints: /vehicle-intelligence/{stock} et /generate-text/{stock}
+### Session 3 - Intelligence Véhicule
+- Module vehicle_intelligence.py (27 marques, 43 modèles, 194 trims)
+- Module llm_v3.py (GPT-4o, Daniel Giroux, 5 styles d'intro)
+- Décodage VIN via NHTSA (vin_decoder.py)
 
-## Fichiers crees
-- /app/vehicle_intelligence.py - Base de connaissance vehicule
-- /app/llm_v3.py - Generation texte v3 (OpenAI)
-- /app/kenbot-runner-fix/ - Fichiers corriges originaux
+### Session 4 - Audit Variables Environnement
+- 30 variables Render mappées, 9 orphelines, ~20 absentes
 
-### Session 4 - Audit Variables d'Environnement
-- Extraction des variables Render depuis 5 screenshots -> RENDER_ENV_REFERENCE.md
-- Audit complet: 30 variables mappees, 9 orphelines, ~20 absentes de Render (avec defaults), 4 divergences non bloquantes
-- Rapport detaille genere -> AUDIT_ENV_VARIABLES.md
+### Session 5 - Test Génération IA
+- 5 véhicules réels testés avec succès
 
-### Session 5 - Test Generation IA sur Vrais Vehicules + Integration Runner
-- Endpoint /api/generate-text/{stock} recrit avec emergentintegrations (GPT-4o)
-- 5 vehicules reels testes avec succes:
-  - Ford Mustang GT: V8 Coyote 450HP detecte, ton muscle car
-  - Jeep Wrangler Rubicon 4XE: type off_road, hybride rechargeable
-  - Chevrolet Malibu LT: type general, ton fiabilite/valeur
-  - Honda Civic EX: type general, ton economie
-  - Jeep Grand Cherokee Summit: type suv_premium, ton luxe
-- Filtre anti-cliches ameliore (ajout "routes de la Beauce" etc.)
-- Endpoint /api/test-batch-generate ajoute pour tester le parsing en batch
-- **llm_v3 integre dans runner_cron_prod.py**:
-  - Priorite 1: generate_smart_text_v3 (nouveau moteur IA)
-  - Priorite 2: sticker_to_ad (ancien pipeline Stellantis)
-  - Priorite 3: text_engine externe (fallback)
-  - Options sticker passees a llm_v3 pour enrichir le texte IA
+### Session 6 - Onglet Preview Texte
+- Humanisation sticker Stellantis (✅ MAJ + ▫️ min)
+- Filtre anti-vulgarité
 
-### Session 6 - Onglet Preview Texte (Dashboard)
-- Nouvel onglet "Preview Texte" dans le dashboard
-- Liste des vehicules actifs avec recherche (stock, titre, VIN)
-- Selection avec surbrillance, header vehicule avec stock/VIN/prix/km
-- Panneau Intelligence Vehicule: marque, modele, trim, type, moteur/HP, vibe, km, prix
-- Generation IA via GPT-4o (emergentintegrations): affichage texte + chars + style + modele
-- Boutons GENERER TEXTE, HUMANISER STICKER (Stellantis), COPIER
-- Humanisation sticker Stellantis: intro IA + titre vendeur + options ✅ MAJUSCULES + sous-options ▫️ minuscules + footer intact
-- Filtre anti-vulgarite ajoute (prompt + post-process)
-- Decodage VIN via NHTSA integre: moteur, HP, transmission, drive, places, securite
-  - vin_decoder.py: module de decodage VIN (API NHTSA gratuite, cache memoire)
-  - Enrichit automatiquement vehicle_intelligence quand les specs manquent
-  - Tags visuels dans le dashboard: 4WD, Automatic, Hybrid, places, securite
-### Session 7 - Integration VIN NHTSA + Humanisation Sticker dans Runner
-- vin_decoder.py integre dans runner_cron_prod.py (decodage VIN pour TOUS les vehicules)
-- _humanize_sticker_text() ajoutee: humanise les annonces Stellantis via OpenAI
-- llm_v3.py enrichi: utilise les specs VIN NHTSA automatiquement
-- Nouveau flux _build_ad_text:
-  1. Decodage VIN NHTSA (tous vehicules)
-  2. P1: Stellantis sticker → humanisation IA (intro + titre + ✅ MAJ + ▫️ min)
-  3. P2: llm_v3 + VIN (generation intelligente)
-  4. P3: Sticker brut + intro (fallback)
-  5. P4: Text engine externe (dernier recours)
+### Session 7 - Intégration VIN NHTSA + Humanisation Sticker dans Runner
+- vin_decoder.py intégré dans runner_cron_prod.py
+- _humanize_sticker_text() via OpenAI
 
-### Session 8 - Cockpit Kenbot (Centre de Controle)
-- Nouvel onglet "Cockpit" comme page par defaut
-- Stats rapides: inventaire actif, posts FB, sans photos, sans post FB
-- **Simulation Dry Run**: un clic genere les textes IA pour X vehicules SANS publier
-  - Montre le texte genere, la methode (STICKER+AI / LLM_V3+VIN / LLM_V3), les specs VIN
-  - Tags intelligence: marque, modele, trim, type, HP, vibe
-  - Tags VIN NHTSA: 4WD, transmission, fuel, places, pays
-  - Bouton COPIER pour chaque texte
-- Logs recents Supabase: derniers runs + events en temps reel
-- Endpoints: /api/cockpit/simulate, /api/cockpit/decode-vin/{stock}, /api/cockpit/recent-logs
+### Session 8 - Cockpit Kenbot
+- Simulation Dry Run, Sync Status, Audit Prix, Marquer Vendus
 
-### Session 10 - Preparation Deploiement Standalone (Vercel + Render)
-- Repo kenbot-dashboard/ cree avec structure standalone complete
-- Backend deploye sur Render: https://kenbot-dashboard-api.onrender.com (LIVE)
-- Frontend Vercel en cours de config
+### Session 10 - Déploiement Standalone
+- kenbot-dashboard/ séparé (Render backend + Vercel frontend)
 
-### Session 11 - Detection VENDU/SOLD + Cockpit complet
-- Logique SOLD ajoutee dans runner_cron_prod.py
-- Scrape complet Kennebec: 48 vehicules actifs, 16 inseres, 16 marques SOLD, 11 prix changes
-- Dashboard enrichi avec 4 nouveaux endpoints:
-  - /api/cockpit/sync-status: vue inventaire vs posts vs FB (NEW, SOLD, NO_PHOTO)
-  - /api/cockpit/audit-prix: compare prix site vs texte FB (6 differences detectees)
-  - /api/cockpit/rebuild-posts: marquer SOLD les posts orphelins en un clic
-  - /api/cockpit/update-text/{stock}: regenerer texte IA + sauver dans Supabase
-- 3 boutons Cockpit: SYNC STATUS, AUDIT PRIX, MARQUER VENDUS
-- Couverture fonctionnelle = ancien kenbot.py + VIN NHTSA + humanisation sticker + intelligence vehicule
-- 27 marques (ajout: Ferrari, Audi, Buick, Cadillac, Mitsubishi)
-- 43 modeles (ajout: Wagoneer, Renegade, Malibu, Civic, CR-V, Accord, Pacifica, 300, Durango, Satellite, 488GTB, Tucson, Santa Fe, Outback, Forester, Silverado, Equinox, F-150, Explorer, Bronco, Escape, Corolla, Tacoma, 4Runner, Highlander, CX-5, CX-50, ProMaster City)
-- 194 trims (ajout: Classic SLT, Sport, SLT pour Ram 1500/2500, ProMaster variantes, Durango R/T/SRT, Civic Si/Type R, etc.)
-- Nouveaux types: berline, minivan, commercial
-- 100% couverture de l'inventaire actif
+### Session 11 - Détection VENDU/SOLD
+- Logique SOLD dans runner_cron_prod.py
+- 4 endpoints Cockpit
+
+### Session 12 - Corrections Critiques (2026-04-12)
+- **FIX: `publish_with_photos` inexistant** → remplacé par publish_photos_unpublished + create_post_with_attached_media
+- **FIX: Duplicate key `23505` sur slug** → upsert_post changé de on_conflict="stock" à on_conflict="slug" (PK) + fallback 3 niveaux
+- **FIX: Double appel `_build_ad_text`** → PHOTOS_ADDED réutilise msg déjà généré (÷2 appels OpenAI)
+- **AJOUT: Pré-cache PDFs Stellantis 2018+** → Au début du cron, vérifie/télécharge tous les PDFs sticker pour Stellantis 2018+
+- **AJOUT: `ensure_sticker_cached` amélioré** → retourne pdf_bytes directement + upsert_sticker_pdf isolé (FK ne casse plus le return)
+- **AJOUT: `_extract_year()` + `_is_stellantis_2018_plus()`** → Extraction année depuis titre ou VIN position 10
+
+## Architecture
+
+```
+/app
+├── kenbot-runner/ (Bot)
+│   ├── runner_cron_prod.py (1430 lignes - cron principal)
+│   ├── llm_v3.py, vehicle_intelligence.py, vin_decoder.py
+│   ├── fb_api.py, supabase_db.py, kennebec_scrape.py
+│   └── sticker_to_ad.py, ad_builder.py
+└── kenbot-dashboard/ (Dashboard standalone)
+    ├── api/server.py (FastAPI sur Render)
+    └── frontend/src/App.js (React sur Vercel)
+```
 
 ## Backlog
-- P0: Push sur GitHub via "Save to Github" pour deployer sur Render
-- P1: Implementer les 9 variables Render orphelines dans le code (ou les retirer)
-- P2: Multi-dealer (Luxura)
-- P2: A/B testing des styles d'intro
-- P2: Alertes/notifications (token FB expire, echec cron)
-- P3: Decouper runner.py en services modulaires
+- P0: Push GitHub → vérifier logs cron (corrections critiques)
+- P1: Multi-dealer Luxura (config séparée)
+- P2: Alertes/notifications (token FB expiré, échec cron)
+- P2: A/B testing styles d'intro
+- P3: Découper runner_cron_prod.py en modules (1430 lignes)
