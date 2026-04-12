@@ -613,13 +613,24 @@ def _build_ad_text(
     sticker_raw_text = ""
     sticker_options_text = ""
     if USE_STICKER_AD and _is_stellantis_vin(vin):
+        # D'abord, essayer de récupérer le sticker déjà en base (base_text du post existant)
+        existing_sticker = ""
+        try:
+            existing_post = sb.table("posts").select("base_text").eq("stock", stock).limit(1).execute()
+            if existing_post.data:
+                bt = (existing_post.data[0].get("base_text") or "")
+                if ("ACCESSOIRES" in bt or "Window Sticker" in bt or "✅" in bt) and len(bt) > 200:
+                    existing_sticker = bt
+        except Exception:
+            pass
+
+        # Essayer de télécharger le PDF frais
         try:
             res = ensure_sticker_cached(sb, vin, run_id)
             if (res.get("status") or "").lower() == "ok":
                 pdf_bytes = sb.storage.from_(STICKERS_BUCKET).download(res["path"])
                 options = _extract_options_from_sticker_bytes(pdf_bytes)
                 if options:
-                    # Texte structuré pour llm_v3
                     opt_lines = []
                     for grp in options:
                         opt_lines.append(grp.get("title", ""))
@@ -627,7 +638,6 @@ def _build_ad_text(
                             opt_lines.append(f"  - {d}")
                     sticker_options_text = "\n".join(opt_lines)
 
-                    # Texte brut complet via build_ad_from_options (pour humanisation)
                     sticker_raw_text = build_ad_from_options(
                         title=title,
                         price=price,
@@ -639,6 +649,11 @@ def _build_ad_text(
                     )
         except Exception as e:
             print(f"[STICKER FETCH] slug={slug} vin={vin} err={e}", flush=True)
+
+        # Fallback: utiliser le texte sticker existant en base si le PDF n'a pas marché
+        if not sticker_raw_text and existing_sticker:
+            sticker_raw_text = existing_sticker
+            print(f"[STICKER FALLBACK] Using existing base_text for slug={slug} ({len(existing_sticker)} chars)", flush=True)
 
     # ══════════════════════════════════════════════════════════════
     # PRIORITE 1 : Stellantis avec sticker → humanisation IA
