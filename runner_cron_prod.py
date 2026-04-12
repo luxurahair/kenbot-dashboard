@@ -991,26 +991,65 @@ def main() -> None:
 
     new_slugs = [s for s in current if s not in inv_db]
 
+    # =========================================================
+    # INDEX PAR STOCK — Source de vérité pour toutes les comparaisons
+    # Le stock est stable, le slug peut changer si le titre change
+    # =========================================================
+    current_by_stock: Dict[str, Dict[str, Any]] = {}
+    for _slug, _v in current.items():
+        _st = (_v.get("stock") or "").strip().upper()
+        if _st:
+            current_by_stock[_st] = _v
+            current_by_stock[_st]["_slug"] = _slug
+
+    inv_db_by_stock: Dict[str, Dict[str, Any]] = {}
+    for _slug, _v in inv_db.items():
+        _st = (_v.get("stock") or "").strip().upper()
+        if _st:
+            inv_db_by_stock[_st] = _v
+            inv_db_by_stock[_st]["_slug"] = _slug
+
+    posts_db_by_stock: Dict[str, Dict[str, Any]] = {}
+    for _slug, _v in posts_db.items():
+        _st = (_v.get("stock") or "").strip().upper()
+        if _st:
+            posts_db_by_stock[_st] = _v
+            posts_db_by_stock[_st]["_slug"] = _slug
+
+    current_stocks = set(current_by_stock.keys())
+    print(f"[INDEX] Kennebec={len(current_stocks)} stocks, DB inv={len(inv_db_by_stock)}, DB posts={len(posts_db_by_stock)}", flush=True)
+
+    # =========================================================
+    # PRICE_CHANGED — Comparaison par STOCK (pas par slug)
+    # =========================================================
     price_changed: List[str] = []
-    for slug in (set(current) & set(inv_db)):
-        old = inv_db.get(slug) or {}
-        new = current.get(slug) or {}
+    for stock in (current_stocks & set(inv_db_by_stock.keys())):
+        old = inv_db_by_stock.get(stock) or {}
+        new = current_by_stock.get(stock) or {}
 
         old_p = old.get("price_int")
         new_p = new.get("price_int")
 
         if isinstance(old_p, int) and isinstance(new_p, int):
             if abs(old_p - new_p) > PRICE_CHANGE_THRESHOLD:
-                price_changed.append(slug)
+                # Utiliser le slug du scrape actuel (peut avoir changé)
+                new_slug = new.get("_slug", "")
+                if new_slug:
+                    price_changed.append(new_slug)
+                    print(f"[PRICE_CHANGED DETECT] stock={stock} old={old_p} new={new_p} slug={new_slug}", flush=True)
 
     # =========================================================
-    # PHOTOS_ADDED - Détection multi-méthodes
+    # PHOTOS_ADDED — Détection par STOCK (Kennebec vs FB)
     # =========================================================
     photos_added: List[str] = []
     if REFRESH_NO_PHOTO_DAILY:
-        for slug in (set(current) & set(posts_db)):
-            post_data = posts_db.get(slug) or {}
-            v = current.get(slug) or {}
+        for stock in (current_stocks & set(posts_db_by_stock.keys())):
+            post_data = posts_db_by_stock.get(stock) or {}
+            v = current_by_stock.get(stock) or {}
+            slug = v.get("_slug") or post_data.get("_slug") or ""
+
+            if not slug:
+                continue
 
             # Photos actuellement disponibles sur le site Kennebec
             current_photos = v.get("photos") or []
@@ -1024,30 +1063,29 @@ def main() -> None:
             photo_count_db = post_data.get("photo_count", None)
             has_no_photo_flag = post_data.get("no_photo", None)
 
-            # ── Méthode 5 (PRINCIPALE): Comparer photos FB vs Kennebec ──
-            # Si FB a 0 ou 1 photo ET Kennebec a > 1 → c'est un NO_PHOTO à updater
+            # ── Méthode principale: Comparer photos FB vs Kennebec ──
             if isinstance(photo_count_db, int) and photo_count_db <= 1 and nb_kennebec > 1:
                 photos_added.append(slug)
                 print(
-                    f"[PHOTOS_ADDED DETECT] slug={slug} "
+                    f"[PHOTOS_ADDED DETECT] stock={stock} slug={slug} "
                     f"fb_photos={photo_count_db} kennebec_photos={nb_kennebec} "
                     f"method=FB_VS_KENNEBEC",
                     flush=True,
                 )
                 continue
 
-            # ── Méthode 1: Flag no_photo explicite ──
+            # ── Flag no_photo explicite ──
             if has_no_photo_flag is True:
                 photos_added.append(slug)
                 print(
-                    f"[PHOTOS_ADDED DETECT] slug={slug} "
+                    f"[PHOTOS_ADDED DETECT] stock={stock} slug={slug} "
                     f"no_photo_flag=True kennebec_photos={nb_kennebec} "
                     f"method=NO_PHOTO_FLAG",
                     flush=True,
                 )
                 continue
 
-            # ── Méthode 2: Indices texte dans le base_text ──
+            # ── Indices texte dans le base_text ──
             base_text = (post_data.get("base_text") or "").lower()
             text_has_no_photo_hint = (
                 "photos suivront" in base_text or
@@ -1061,38 +1099,12 @@ def main() -> None:
             if text_has_no_photo_hint:
                 photos_added.append(slug)
                 print(
-                    f"[PHOTOS_ADDED DETECT] slug={slug} "
+                    f"[PHOTOS_ADDED DETECT] stock={stock} slug={slug} "
                     f"kennebec_photos={nb_kennebec} "
                     f"method=TEXT_HINT",
                     flush=True,
                 )
                 continue
-
-            # ── Méthode 3: Anciennes entrées sans photo_count (NULL en DB) ──
-            # Si photo_count est NULL et le post existe → vérifier si Kennebec a beaucoup de photos
-            if photo_count_db is None and nb_kennebec > 5:
-                # Probablement un ancien post sans tracking → vérifier le post n'a pas été
-                # mis à jour récemment pour éviter une boucle
-                last_updated = post_data.get("last_updated_at") or post_data.get("published_at") or ""
-                skip_this = False
-                if last_updated:
-                    try:
-                        from datetime import datetime as _dt, timezone as _tz
-                        upd = _dt.fromisoformat(last_updated.replace("Z", "+00:00"))
-                        hours_ago = (datetime.now(_tz.utc) - upd).total_seconds() / 3600
-                        if hours_ago < 48:
-                            skip_this = True
-                    except Exception:
-                        pass
-
-                if not skip_this:
-                    photos_added.append(slug)
-                    print(
-                        f"[PHOTOS_ADDED DETECT] slug={slug} "
-                        f"photo_count=NULL kennebec_photos={nb_kennebec} "
-                        f"method=NULL_COUNT_MANY_PHOTOS",
-                        flush=True,
-                    )
 
     print(f"[REFRESH_NO_PHOTO] {len(photos_added)} posts à mettre à jour avec photos (limit={REFRESH_NO_PHOTO_LIMIT})", flush=True)
 
