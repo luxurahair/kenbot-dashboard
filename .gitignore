@@ -27,7 +27,7 @@ credentials.json
 .credentials
 
 # Emergent platform (do not push)
-frontend/
+/frontend/
 backend/
 scripts/
 node_modules/
