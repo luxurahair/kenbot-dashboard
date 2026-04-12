@@ -46,6 +46,7 @@ function App() {
         {loading ? <LoadingState /> : (
           <>
             {tab === 'cockpit' && <CockpitTab inventory={inventory} status={status} />}
+            {tab === 'compare' && <CompareTab />}
             {tab === 'dashboard' && <DashboardTab status={status} events={events} posts={posts} />}
             {tab === 'inventory' && <InventoryTab inventory={inventory} />}
             {tab === 'posts' && <PostsTab posts={posts} />}
@@ -64,6 +65,7 @@ function Header({ tab, setTab, status }) {
   const [showRunPanel, setShowRunPanel] = useState(false);
   const tabs = [
     { id: 'cockpit', label: 'Cockpit' },
+    { id: 'compare', label: 'Kennebec vs FB' },
     { id: 'dashboard', label: 'Dashboard' },
     { id: 'inventory', label: 'Inventaire' },
     { id: 'posts', label: 'Posts FB' },
@@ -964,5 +966,193 @@ function formatDateTime(ts) {
   if (!ts) return '--';
   try { const d = new Date(ts); return `${d.toLocaleDateString('fr-CA', { month: 'short', day: 'numeric' })} ${d.toLocaleTimeString('fr-CA', { hour: '2-digit', minute: '2-digit' })}`; } catch { return ts; }
 }
+
+
+function CompareTab() {
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [filter, setFilter] = useState('all');
+  const [search, setSearch] = useState('');
+  const [lastRefresh, setLastRefresh] = useState(null);
+
+  const fetchCompare = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await fetch(`${API}/api/vehicles/compare`);
+      const json = await res.json();
+      setData(json);
+      setLastRefresh(new Date().toLocaleTimeString('fr-CA'));
+    } catch (e) {
+      console.error('Compare fetch error:', e);
+    }
+    setLoading(false);
+  }, []);
+
+  useEffect(() => { fetchCompare(); }, [fetchCompare]);
+
+  // Auto-refresh toutes les 2 minutes
+  useEffect(() => {
+    const interval = setInterval(fetchCompare, 120000);
+    return () => clearInterval(interval);
+  }, [fetchCompare]);
+
+  if (loading && !data) return <LoadingState />;
+  if (!data) return <div style={{ padding: '2rem', color: '#ef4444' }}>Erreur de chargement</div>;
+
+  const { vehicles = [], stats = {} } = data;
+
+  const filtered = vehicles.filter(v => {
+    const matchFilter = filter === 'all'
+      || (filter === 'problems' && v.problem)
+      || (filter === 'active' && v.kennebec_status === 'ACTIVE' && v.fb_status === 'ACTIVE')
+      || (filter === 'no_fb' && v.fb_status === 'AUCUN POST')
+      || (filter === 'faux_vendu' && v.problem === 'FAUX VENDU')
+      || (filter === 'sans_photo' && v.problem === 'SANS PHOTO')
+      || (filter === 'sold' && v.fb_status === 'SOLD');
+    const matchSearch = !search || v.title.toLowerCase().includes(search.toLowerCase())
+      || v.stock.toLowerCase().includes(search.toLowerCase());
+    return matchFilter && matchSearch;
+  });
+
+  const statusBadge = (status, problem) => {
+    const colors = {
+      'ACTIVE': { bg: '#065f46', color: '#6ee7b7' },
+      'SOLD': { bg: '#7f1d1d', color: '#fca5a5' },
+      'AUCUN POST': { bg: '#78350f', color: '#fde68a' },
+      'INCONNU': { bg: '#374151', color: '#9ca3af' },
+    };
+    const c = colors[status] || colors['INCONNU'];
+    return (
+      <span style={{ padding: '2px 8px', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 600, backgroundColor: c.bg, color: c.color }}>
+        {status}
+      </span>
+    );
+  };
+
+  const problemBadge = (problem) => {
+    if (!problem) return null;
+    const colors = {
+      'FAUX VENDU': { bg: '#7f1d1d', color: '#fca5a5', icon: '🚨' },
+      'PAS SUR FB': { bg: '#78350f', color: '#fde68a', icon: '⚠️' },
+      'SANS PHOTO': { bg: '#713f12', color: '#fef08a', icon: '📷' },
+      'FB PAS MAJ': { bg: '#1e3a5f', color: '#93c5fd', icon: '🔄' },
+    };
+    const c = colors[problem] || { bg: '#374151', color: '#9ca3af', icon: '❓' };
+    return (
+      <span style={{ padding: '2px 8px', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 700, backgroundColor: c.bg, color: c.color }}>
+        {c.icon} {problem}
+      </span>
+    );
+  };
+
+  const fmtPrice = (p) => p ? `${Number(p).toLocaleString('fr-CA')} $` : '—';
+  const fmtDate = (d) => {
+    if (!d) return '—';
+    try {
+      return new Date(d).toLocaleDateString('fr-CA', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+    } catch { return d; }
+  };
+
+  return (
+    <div style={{ padding: '1.5rem' }} data-testid="compare-tab">
+      {/* Stats cards */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '0.75rem', marginBottom: '1.5rem' }}>
+        {[
+          { label: 'Kennebec', value: stats.kennebec_active || 0, color: '#3b82f6', icon: '🌐' },
+          { label: 'FB Actifs', value: stats.fb_active || 0, color: '#22c55e', icon: '📘' },
+          { label: 'FB Vendus', value: stats.fb_sold || 0, color: '#ef4444', icon: '🏷️' },
+          { label: 'Pas sur FB', value: stats.no_fb_post || 0, color: '#f59e0b', icon: '⚠️' },
+          { label: 'Faux Vendus', value: stats.faux_vendu || 0, color: '#dc2626', icon: '🚨' },
+          { label: 'Sans Photo', value: stats.sans_photo || 0, color: '#eab308', icon: '📷' },
+          { label: 'Problèmes', value: stats.problems || 0, color: stats.problems > 0 ? '#ef4444' : '#22c55e', icon: stats.problems > 0 ? '❌' : '✅' },
+        ].map(s => (
+          <div key={s.label} style={{ backgroundColor: '#1a1a2e', borderRadius: '8px', padding: '1rem', textAlign: 'center', border: `1px solid ${s.color}33` }}>
+            <div style={{ fontSize: '1.5rem' }}>{s.icon}</div>
+            <div style={{ fontSize: '1.75rem', fontWeight: 700, color: s.color }}>{s.value}</div>
+            <div style={{ fontSize: '0.75rem', color: '#9ca3af' }}>{s.label}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Filters + Search */}
+      <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem', flexWrap: 'wrap', alignItems: 'center' }}>
+        {[
+          { id: 'all', label: `Tous (${vehicles.length})` },
+          { id: 'problems', label: `Problèmes (${stats.problems || 0})` },
+          { id: 'active', label: 'Actifs FB' },
+          { id: 'no_fb', label: 'Pas sur FB' },
+          { id: 'faux_vendu', label: 'Faux Vendus' },
+          { id: 'sans_photo', label: 'Sans Photo' },
+          { id: 'sold', label: 'Vendus' },
+        ].map(f => (
+          <button
+            key={f.id}
+            data-testid={`filter-${f.id}`}
+            onClick={() => setFilter(f.id)}
+            style={{
+              padding: '4px 12px', borderRadius: '16px', border: 'none', cursor: 'pointer', fontSize: '0.8rem', fontWeight: 600,
+              backgroundColor: filter === f.id ? '#3b82f6' : '#1f2937',
+              color: filter === f.id ? '#fff' : '#9ca3af',
+            }}
+          >
+            {f.label}
+          </button>
+        ))}
+        <input
+          data-testid="compare-search"
+          type="text"
+          placeholder="Chercher stock ou titre..."
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          style={{ marginLeft: 'auto', padding: '6px 12px', borderRadius: '6px', border: '1px solid #374151', backgroundColor: '#111827', color: '#e5e7eb', fontSize: '0.85rem', width: '220px' }}
+        />
+        <button
+          data-testid="compare-refresh"
+          onClick={fetchCompare}
+          style={{ padding: '6px 12px', borderRadius: '6px', border: '1px solid #374151', backgroundColor: '#1f2937', color: '#9ca3af', cursor: 'pointer', fontSize: '0.8rem' }}
+        >
+          {loading ? '...' : '🔄'}
+        </button>
+        {lastRefresh && <span style={{ fontSize: '0.7rem', color: '#6b7280' }}>MAJ: {lastRefresh}</span>}
+      </div>
+
+      {/* Table */}
+      <div style={{ overflowX: 'auto', borderRadius: '8px', border: '1px solid #1f2937' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem' }} data-testid="compare-table">
+          <thead>
+            <tr style={{ backgroundColor: '#111827' }}>
+              {['Stock', 'Véhicule', 'Prix', 'Kennebec', 'Facebook', 'Photos FB', 'Publié le', 'Problème'].map(h => (
+                <th key={h} style={{ padding: '10px 12px', textAlign: 'left', color: '#9ca3af', fontWeight: 600, borderBottom: '1px solid #1f2937', whiteSpace: 'nowrap' }}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {filtered.map(v => (
+              <tr key={v.stock} style={{ borderBottom: '1px solid #1f293766', backgroundColor: v.problem ? '#1a0a0a' : 'transparent' }}>
+                <td style={{ padding: '8px 12px', fontFamily: 'monospace', fontWeight: 700, color: '#e5e7eb' }}>{v.stock}</td>
+                <td style={{ padding: '8px 12px', color: '#d1d5db', maxWidth: '280px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{v.title}</td>
+                <td style={{ padding: '8px 12px', color: '#22c55e', fontWeight: 600, whiteSpace: 'nowrap' }}>{fmtPrice(v.price)}</td>
+                <td style={{ padding: '8px 12px' }}>{statusBadge(v.kennebec_status)}</td>
+                <td style={{ padding: '8px 12px' }}>{statusBadge(v.fb_status)}</td>
+                <td style={{ padding: '8px 12px', textAlign: 'center', color: v.fb_no_photo ? '#fbbf24' : '#6ee7b7' }}>
+                  {v.fb_no_photo ? '📷 0' : v.fb_photos > 0 ? `✅ ${v.fb_photos}` : '—'}
+                </td>
+                <td style={{ padding: '8px 12px', color: '#9ca3af', whiteSpace: 'nowrap' }}>{fmtDate(v.fb_published)}</td>
+                <td style={{ padding: '8px 12px' }}>{problemBadge(v.problem)}</td>
+              </tr>
+            ))}
+            {filtered.length === 0 && (
+              <tr><td colSpan={8} style={{ padding: '2rem', textAlign: 'center', color: '#6b7280' }}>Aucun véhicule trouvé</td></tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+      <div style={{ marginTop: '0.5rem', fontSize: '0.7rem', color: '#6b7280' }}>
+        {filtered.length} véhicules affichés sur {vehicles.length} total — Auto-refresh 2 min
+      </div>
+    </div>
+  );
+}
+
 
 export default App;

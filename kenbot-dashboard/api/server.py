@@ -327,6 +327,115 @@ async def trigger_force_stock(stock: str):
     except Exception as e:
         return {"ok": False, "message": str(e)}
 
+
+@api_router.get("/vehicles/compare")
+async def get_vehicles_compare():
+    """
+    Comparaison Kennebec (inventaire) vs Facebook (posts).
+    Retourne chaque véhicule avec son statut sur les deux plateformes.
+    """
+    if not sb:
+        return {"vehicles": [], "stats": {}}
+
+    try:
+        inv_result = sb.table("inventory").select("slug,stock,title,vin,price_int,km_int,status,updated_at").order("updated_at", desc=True).limit(500).execute()
+        posts_result = sb.table("posts").select("slug,stock,post_id,status,base_text,no_photo,photo_count,published_at,last_updated_at,sold_at").limit(500).execute()
+
+        inv_data = inv_result.data or []
+        posts_data = posts_result.data or []
+
+        # Index posts par stock
+        posts_by_stock = {}
+        for p in posts_data:
+            st = (p.get("stock") or "").strip().upper()
+            if st:
+                posts_by_stock[st] = p
+
+        vehicles = []
+        for inv in inv_data:
+            stock = (inv.get("stock") or "").strip().upper()
+            if not stock:
+                continue
+
+            post = posts_by_stock.get(stock)
+            inv_status = (inv.get("status") or "").upper()
+
+            # Déterminer le statut FB
+            fb_status = "AUCUN POST"
+            fb_post_id = ""
+            fb_photos = 0
+            fb_published = ""
+            fb_updated = ""
+            fb_no_photo = False
+
+            if post:
+                fb_status = (post.get("status") or "INCONNU").upper()
+                fb_post_id = post.get("post_id") or ""
+                fb_photos = post.get("photo_count") or 0
+                fb_published = post.get("published_at") or ""
+                fb_updated = post.get("last_updated_at") or ""
+                fb_no_photo = post.get("no_photo") is True
+
+                # Détecter no_photo depuis le texte
+                if not fb_no_photo and fb_photos <= 1:
+                    bt = (post.get("base_text") or "").lower()
+                    fb_no_photo = any(h in bt for h in ["photos suivront", "sans photo", "photo non disponible"])
+
+            # Problème détecté?
+            problem = ""
+            if inv_status == "ACTIVE" and fb_status == "SOLD":
+                problem = "FAUX VENDU"
+            elif inv_status == "ACTIVE" and fb_status == "AUCUN POST":
+                problem = "PAS SUR FB"
+            elif inv_status == "ACTIVE" and fb_no_photo:
+                problem = "SANS PHOTO"
+            elif inv_status == "SOLD" and fb_status == "ACTIVE":
+                problem = "FB PAS MAJ"
+
+            vehicles.append({
+                "stock": stock,
+                "title": inv.get("title") or "",
+                "price": inv.get("price_int"),
+                "km": inv.get("km_int"),
+                "vin": inv.get("vin") or "",
+                "kennebec_status": inv_status,
+                "fb_status": fb_status,
+                "fb_post_id": fb_post_id,
+                "fb_photos": fb_photos,
+                "fb_no_photo": fb_no_photo,
+                "fb_published": fb_published,
+                "fb_updated": fb_updated,
+                "problem": problem,
+                "updated_at": inv.get("updated_at") or "",
+            })
+
+        # Stats
+        total = len(vehicles)
+        on_kennebec = sum(1 for v in vehicles if v["kennebec_status"] == "ACTIVE")
+        on_fb_active = sum(1 for v in vehicles if v["fb_status"] == "ACTIVE")
+        on_fb_sold = sum(1 for v in vehicles if v["fb_status"] == "SOLD")
+        no_fb = sum(1 for v in vehicles if v["fb_status"] == "AUCUN POST" and v["kennebec_status"] == "ACTIVE")
+        faux_vendu = sum(1 for v in vehicles if v["problem"] == "FAUX VENDU")
+        sans_photo = sum(1 for v in vehicles if v["problem"] == "SANS PHOTO")
+        problems = sum(1 for v in vehicles if v["problem"])
+
+        return {
+            "vehicles": vehicles,
+            "stats": {
+                "total": total,
+                "kennebec_active": on_kennebec,
+                "fb_active": on_fb_active,
+                "fb_sold": on_fb_sold,
+                "no_fb_post": no_fb,
+                "faux_vendu": faux_vendu,
+                "sans_photo": sans_photo,
+                "problems": problems,
+            }
+        }
+    except Exception as e:
+        logging.error(f"Compare error: {e}")
+        return {"vehicles": [], "stats": {}, "error": str(e)}
+
 @api_router.get("/changelog")
 async def get_changelog():
     return CHANGELOG
