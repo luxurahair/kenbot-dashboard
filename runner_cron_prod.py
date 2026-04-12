@@ -425,12 +425,70 @@ def _extract_options_from_sticker_bytes(pdf_bytes: bytes) -> List[Dict[str, Any]
             except Exception:
                 pass
 
-def _ensure_contact_footer(text: str) -> str:
+def _ensure_contact_footer(text: str, v: Dict[str, Any] = None) -> str:
+    """Ajoute le footer avec hashtags SEO dynamiques."""
+    if v:
+        seo_tags = _build_seo_hashtags(v)
+        footer = get_dealer_footer(hashtags=seo_tags)
+    else:
+        footer = None
+    return add_footer_if_missing(text, footer=footer)
+
+
+def _build_seo_hashtags(v: Dict[str, Any]) -> List[str]:
     """
-    DEPRECATED: Utilise maintenant footer_utils.add_footer_if_missing()
-    Garde pour compatibilité mais redirige vers le module centralisé.
+    Génère des hashtags SEO dynamiques pour maximiser l'indexation Google.
+    Les posts Facebook publics sont indexés par Google.
     """
-    return add_footer_if_missing(text)
+    tags = []
+    title = (v.get("title") or "").strip()
+
+    # Extraire marque et modèle du titre
+    parts = title.split()
+    if len(parts) >= 2:
+        make = parts[0]  # Dodge, Ram, Jeep, Ford...
+        model = parts[1]  # Hornet, 1500, Wrangler...
+        tags.append(f"#{make}")
+        tags.append(f"#{make}{model}")
+
+    # Année
+    import re
+    m = re.search(r"\b(20[12]\d)\b", title)
+    if m:
+        year = m.group(1)
+        if len(parts) >= 2:
+            tags.append(f"#{parts[0]}{year}")
+
+    # Tags fixes SEO local Beauce
+    tags.extend([
+        "#DanielGiroux",
+        "#KennebecDodge",
+        "#Beauce",
+        "#SaintGeorges",
+        "#AutoUsagée",
+        "#Québec",
+    ])
+
+    # Tags spécifiques au type
+    title_lower = title.lower()
+    if any(w in title_lower for w in ["1500", "2500", "3500", "ram"]):
+        tags.append("#Pickup")
+        tags.append("#Truck")
+    if any(w in title_lower for w in ["wrangler", "gladiator"]):
+        tags.append("#Jeep4x4")
+        tags.append("#OffRoad")
+    if any(w in title_lower for w in ["hellcat", "scat pack", "srt"]):
+        tags.append("#MuscleCarQuébec")
+    if any(w in title_lower for w in ["4xe", "hybrid", "phev"]):
+        tags.append("#Hybride")
+        tags.append("#ÉcoÉnergie")
+    if any(w in title_lower for w in ["hornet"]):
+        tags.append("#SUVCompact")
+    if any(w in title_lower for w in ["promaster"]):
+        tags.append("#Utilitaire")
+        tags.append("#Commercial")
+
+    return tags
 
 def _maybe_add_ai_intro(v: Dict[str, Any], body: str, use_humanize: bool = True) -> str:
     """
@@ -521,11 +579,17 @@ def _price_changed_intro_variant2(title: str, old_price: Any, new_price: Any) ->
     if new_n >= old_n:
         return ""
 
+    diff = old_n - new_n
+    diff_txt = _fmt_price(diff)
+
     return (
-        f"💥 Nouveau prix pour ce {title} !\n\n"
-        f"Avant : {old_txt}\n"
-        f"Maintenant : {new_txt}\n\n"
-        f"Si vous l'aviez à l'œil, c'est peut-être le bon moment pour passer à l'action."
+        f"📉 RÉDUCTION DE PRIX — {diff_txt} DE RABAIS!\n\n"
+        f"🔥 {title} 🔥\n\n"
+        f"❌ Ancien prix : {old_txt}\n"
+        f"✅ Nouveau prix : {new_txt}\n\n"
+        f"C'est {diff_txt} de moins dans vos poches. "
+        f"Si vous l'aviez à l'œil, c'est le moment ou jamais.\n\n"
+        f"Premier arrivé, premier servi — appelez-moi.\n"
     )
 
 
@@ -757,7 +821,7 @@ def _build_ad_text(
             )
             if humanized and len(humanized) >= MIN_POST_TEXT_LEN:
                 # Ajouter le footer APRÈS humanisation si absent
-                humanized = _ensure_contact_footer(humanized)
+                humanized = _ensure_contact_footer(humanized, v)
                 print(f"[STICKER+AI OK] slug={slug} stock={stock} chars={len(humanized)}", flush=True)
                 return humanized
             elif humanized:
@@ -771,7 +835,7 @@ def _build_ad_text(
             intro = _price_changed_intro_variant2(title, old_price, new_price)
             if intro:
                 txt = intro + "\n\n" + txt
-        return _ensure_contact_footer(txt)
+        return _ensure_contact_footer(txt, v)
 
     # ══════════════════════════════════════════════════════════════
     # PRIORITE 2 : llm_v3 (génération intelligente avec VIN)
@@ -791,7 +855,7 @@ def _build_ad_text(
             )
             if smart_text and len(smart_text) >= MIN_POST_TEXT_LEN:
                 print(f"[LLM_V3 OK] slug={slug} stock={stock} event={event} chars={len(smart_text)}", flush=True)
-                return _ensure_contact_footer(smart_text)
+                return _ensure_contact_footer(smart_text, v)
             elif smart_text:
                 print(f"[LLM_V3 SHORT] slug={slug} chars={len(smart_text)} < min={MIN_POST_TEXT_LEN}, fallback", flush=True)
         except Exception as e:
@@ -806,7 +870,7 @@ def _build_ad_text(
             intro = _price_changed_intro_variant2(title, old_price, new_price)
             if intro:
                 txt = intro + "\n\n" + txt
-        return _ensure_contact_footer(txt)
+        return _ensure_contact_footer(txt, v)
 
     # ══════════════════════════════════════════════════════════════
     # PRIORITE 4 : Fallback text engine externe
@@ -844,7 +908,7 @@ def _build_ad_text(
         if intro:
             txt = intro + "\n\n" + txt
 
-    return _ensure_contact_footer(txt)
+    return _ensure_contact_footer(txt, v)
 
 
 def rebuild_posts_map(limit: int = 2000, cooldown_days: int = 7) -> Dict[str, Dict[str, Any]]:
