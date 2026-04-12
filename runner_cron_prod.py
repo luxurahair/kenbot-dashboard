@@ -107,7 +107,7 @@ SUPABASE_KEY = (os.getenv("SUPABASE_SERVICE_ROLE_KEY") or "").strip()
 STICKERS_BUCKET = os.getenv("SB_BUCKET_STICKERS", "kennebec-stickers").strip()
 OUTPUTS_BUCKET = os.getenv("SB_BUCKET_OUTPUTS", "kennebec-outputs").strip()
 
-MAX_TARGETS = int(os.getenv("KENBOT_MAX_TARGETS", "4"))
+MAX_TARGETS = int(os.getenv("KENBOT_MAX_TARGETS", "10"))
 MAX_PHOTOS = int(os.getenv("KENBOT_MAX_PHOTOS", "15"))
 POST_PHOTOS = int(os.getenv("KENBOT_POST_PHOTOS", "10"))
 SLEEP_BETWEEN = int(os.getenv("KENBOT_SLEEP_BETWEEN_POSTS", "30"))
@@ -941,10 +941,10 @@ def main() -> None:
     print(f"[SOLD DETECT] {len(sold_slugs)} posts à marquer VENDU", flush=True)
 
     targets: List[Tuple[str, str]] = (
-        [(s, "SOLD") for s in sold_slugs]
+        [(s, "PHOTOS_ADDED") for s in photos_added[:REFRESH_NO_PHOTO_LIMIT]]
         + [(s, "PRICE_CHANGED") for s in price_changed]
         + [(s, "NEW") for s in new_slugs]
-        + [(s, "PHOTOS_ADDED") for s in photos_added[:REFRESH_NO_PHOTO_LIMIT]]
+        + [(s, "SOLD") for s in sold_slugs]
     )
 
     if not targets:
