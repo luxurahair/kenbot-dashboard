@@ -927,6 +927,14 @@ def main() -> None:
         print("[WARN] No vehicles parsed. Abort.", flush=True)
         return
 
+    # Enregistrer le run MAINTENANT (avant le pré-cache qui a besoin du run_id en FK)
+    try:
+        from supabase_db import upsert_scrape_run
+        upsert_scrape_run(sb, run_id, status="RUNNING", note=f"inv_count={len(current)}")
+        print(f"[RUN] scrape_run created: {run_id}", flush=True)
+    except Exception as e:
+        print(f"[RUN] scrape_run insert failed: {e} (non-bloquant)", flush=True)
+
     # =========================================================
     # PRÉ-CACHE: Forcer le téléchargement des PDFs Stellantis 2018+
     # =========================================================
