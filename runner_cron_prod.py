@@ -1247,11 +1247,14 @@ def main() -> None:
             continue
 
         # =========================================================
-        # FIX #2: PHOTOS_ADDED - Corriger l'ordre des arguments
+        # FIX #2: PHOTOS_ADDED - Réutiliser msg, publier correctement
         # =========================================================
         if event == "PHOTOS_ADDED":
             old_post = posts_db.get(slug) or {}
             old_post_id = (old_post.get("post_id") or "").strip()
+
+            # Réutiliser msg déjà généré et validé (plus de double _build_ad_text!)
+            base_text = msg
 
             if not old_post_id:
                 # Post reseté (post_id vide) — publier comme un NEW
@@ -1260,12 +1263,20 @@ def main() -> None:
                 if not photos:
                     skipped_no_photos += 1
                     continue
-                base_text = _build_ad_text(sb, run_id, slug, v, "NEW")
-                if not base_text or len(base_text) < MIN_POST_TEXT_LEN:
-                    skipped_bad_text += 1
-                    continue
                 try:
-                    new_post_id = publish_with_photos(FB_PAGE_ID, FB_TOKEN, base_text, photos[:POST_PHOTOS])
+                    media_ids = publish_photos_unpublished(
+                        FB_PAGE_ID, FB_TOKEN, photos[:POST_PHOTOS], limit=POST_PHOTOS,
+                    )
+                    new_post_id = create_post_with_attached_media(FB_PAGE_ID, FB_TOKEN, base_text, media_ids)
+
+                    # Extra photos en commentaires
+                    extra = photos[POST_PHOTOS:]
+                    if extra:
+                        try:
+                            publish_photos_as_comment_batch(FB_PAGE_ID, FB_TOKEN, new_post_id, extra)
+                        except Exception as e:
+                            print(f"[PHOTOS_ADDED→NEW] Extra photos comment fail: {e}", flush=True)
+
                     upsert_post(sb, {
                         "slug": slug, "post_id": new_post_id, "status": "ACTIVE",
                         "published_at": now, "last_updated_at": now,
@@ -1293,11 +1304,7 @@ def main() -> None:
                 else:
                     print(f"[PHOTOS_ADDED] Warning: Could not delete old post {old_post_id}, continuing anyway", flush=True)
 
-                # 2. TOUJOURS régénérer le texte pour PHOTOS_ADDED
-                #    (l'ancien texte est probablement "Photos suivront" ou sans AI)
-                base_text = _build_ad_text(sb, run_id, slug, v, "NEW")
-
-                # 3. Créer le nouveau post avec les vraies photos
+                # 2. Créer le nouveau post avec les vraies photos (msg déjà prêt)
                 media_ids = publish_photos_unpublished(
                     FB_PAGE_ID,
                     FB_TOKEN,
@@ -1306,7 +1313,7 @@ def main() -> None:
                 )
                 new_post_id = create_post_with_attached_media(FB_PAGE_ID, FB_TOKEN, base_text, media_ids)
 
-                # 4. Ajouter les photos supplémentaires en commentaires si nécessaire
+                # 3. Ajouter les photos supplémentaires en commentaires si nécessaire
                 extra = photos[POST_PHOTOS:]
                 if extra:
                     try:

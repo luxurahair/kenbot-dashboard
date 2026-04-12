@@ -85,18 +85,33 @@ def upsert_post(sb: Client, row: Dict[str, Any]) -> None:
     row["stock"] = stock
     row["slug"] = slug or None
 
-    # Try upsert on stock first; if slug conflict, update by stock instead
+    # Upsert on slug (PRIMARY KEY) — si le slug existe, on update
     try:
         sb.table("posts").upsert(
             row,
-            on_conflict="stock"
+            on_conflict="slug"
         ).execute()
     except Exception as e:
         err_msg = str(e)
         if "23505" in err_msg or "duplicate key" in err_msg.lower():
-            # Slug conflict — update existing row by stock
-            update_row = {k: v for k, v in row.items() if k != "slug"}
-            sb.table("posts").update(update_row).eq("stock", stock).execute()
+            # Conflit stock unique — update par slug (PK)
+            try:
+                update_row = {k: v for k, v in row.items()}
+                sb.table("posts").update(update_row).eq("slug", slug).execute()
+            except Exception as e2:
+                print(f"[UPSERT_POST FALLBACK] slug={slug} stock={stock} err={e2}", flush=True)
+                # Dernier recours: update seulement les champs critiques par slug
+                try:
+                    sb.table("posts").update({
+                        "post_id": row.get("post_id"),
+                        "status": row.get("status"),
+                        "base_text": row.get("base_text"),
+                        "last_updated_at": row.get("last_updated_at"),
+                        "no_photo": row.get("no_photo"),
+                        "photo_count": row.get("photo_count"),
+                    }).eq("slug", slug).execute()
+                except Exception as e3:
+                    print(f"[UPSERT_POST LAST_RESORT] slug={slug} err={e3}", flush=True)
         else:
             raise
 
