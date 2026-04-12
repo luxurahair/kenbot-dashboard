@@ -37,7 +37,6 @@ from fb_api import (
     publish_photos_unpublished,
     create_post_with_attached_media,
     update_post_text,
-    publish_photos_as_comment_batch,
     delete_post,
 )
 from supabase_db import (
@@ -1304,19 +1303,11 @@ def main() -> None:
                     )
                     new_post_id = create_post_with_attached_media(FB_PAGE_ID, FB_TOKEN, base_text, media_ids)
 
-                    # Extra photos en commentaires
-                    extra = photos[POST_PHOTOS:]
-                    if extra:
-                        try:
-                            publish_photos_as_comment_batch(FB_PAGE_ID, FB_TOKEN, new_post_id, extra)
-                        except Exception as e:
-                            print(f"[PHOTOS_ADDED→NEW] Extra photos comment fail: {e}", flush=True)
-
                     upsert_post(sb, {
                         "slug": slug, "post_id": new_post_id, "status": "ACTIVE",
                         "published_at": now, "last_updated_at": now,
                         "base_text": base_text, "no_photo": False,
-                        "photo_count": len(photos), "stock": stock,
+                        "photo_count": len(photos[:POST_PHOTOS]), "stock": stock,
                     })
                     posted += 1
                     print(f"[NEW from reset] ✅ slug={slug} stock={stock} post_id={new_post_id} photos={len(photos)}", flush=True)
@@ -1348,15 +1339,7 @@ def main() -> None:
                 )
                 new_post_id = create_post_with_attached_media(FB_PAGE_ID, FB_TOKEN, base_text, media_ids)
 
-                # 3. Ajouter les photos supplémentaires en commentaires si nécessaire
-                extra = photos[POST_PHOTOS:]
-                if extra:
-                    try:
-                        publish_photos_as_comment_batch(FB_PAGE_ID, FB_TOKEN, new_post_id, extra)
-                    except Exception as e:
-                        print(f"[PHOTOS_ADDED] Extra photos comment fail: {e}", flush=True)
-
-                # 5. Mettre à jour la DB avec le nouveau post_id
+                # Mettre à jour la DB avec le nouveau post_id
                 upsert_post(
                     sb,
                     {
@@ -1416,13 +1399,6 @@ def main() -> None:
                 limit=POST_PHOTOS,
             )
             post_id = create_post_with_attached_media(FB_PAGE_ID, FB_TOKEN, msg, media_ids)
-
-            extra = photos[POST_PHOTOS:]
-            if extra:
-                try:
-                    publish_photos_as_comment_batch(FB_PAGE_ID, FB_TOKEN, post_id, extra)
-                except Exception as e:
-                    print(f"[EXTRA PHOTOS COMMENT FAIL] slug={slug} post_id={post_id} err={e}", flush=True)
 
             # FIX #1: Mettre no_photo=True et photo_count=0 si fallback utilisé
             upsert_post(
