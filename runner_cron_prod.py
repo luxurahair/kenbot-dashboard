@@ -1165,8 +1165,33 @@ def main() -> None:
 
     print(f"[SOLD DETECT] {len(sold_slugs)} posts à marquer VENDU", flush=True)
 
+    # =========================================================
+    # UNSOLD — Corriger les posts marqués VENDU par erreur
+    # Si un post est SOLD en DB mais le stock est encore sur Kennebec → remettre actif
+    # =========================================================
+    unsold_slugs: List[str] = []
+    for stock in current_stocks:
+        post_data = posts_db_by_stock.get(stock)
+        if not post_data:
+            continue
+        post_status = (post_data.get("status") or "").upper()
+        post_id = (post_data.get("post_id") or "").strip()
+        post_slug = post_data.get("_slug") or ""
+
+        if post_status == "SOLD" and post_id and post_slug:
+            unsold_slugs.append(post_slug)
+            print(
+                f"[UNSOLD DETECT] stock={stock} slug={post_slug} — "
+                f"marqué VENDU mais encore sur Kennebec! Sera restauré.",
+                flush=True,
+            )
+
+    if unsold_slugs:
+        print(f"[UNSOLD] {len(unsold_slugs)} posts à restaurer (faux VENDU)", flush=True)
+
     targets: List[Tuple[str, str]] = (
-        [(s, "PHOTOS_ADDED") for s in photos_added[:REFRESH_NO_PHOTO_LIMIT]]
+        [(s, "UNSOLD") for s in unsold_slugs]  # PRIORITÉ MAX: corriger les faux VENDU
+        + [(s, "PHOTOS_ADDED") for s in photos_added[:REFRESH_NO_PHOTO_LIMIT]]
         + [(s, "PRICE_CHANGED") for s in price_changed]
         + [(s, "NEW") for s in new_slugs]
         + [(s, "SOLD") for s in sold_slugs]
@@ -1182,6 +1207,7 @@ def main() -> None:
     posted = 0
     updated = 0
     sold_count = 0
+    unsold_count = 0
     skipped_dup = 0
     skipped_bad_text = 0
     skipped_no_photos = 0
@@ -1189,6 +1215,46 @@ def main() -> None:
     for slug, event in targets[:MAX_TARGETS]:
         v = current.get(slug) or {}
         stock = (v.get("stock") or "").strip().upper()
+
+        # =========================================================
+        # UNSOLD — Restaurer un post marqué VENDU par erreur
+        # =========================================================
+        if event == "UNSOLD":
+            old_post = posts_db.get(slug) or {}
+            post_id = (old_post.get("post_id") or "").strip()
+            old_stock = (old_post.get("stock") or "").strip().upper()
+
+            if not post_id:
+                continue
+
+            # Récupérer le base_text original (enlever le préfixe VENDU)
+            base_text = old_post.get("base_text") or ""
+            if "🚨 VENDU 🚨" in base_text:
+                # Enlever le bloc VENDU pour retrouver le texte original
+                parts = base_text.split("────────────────────\n\n", 1)
+                if len(parts) > 1:
+                    base_text = parts[1]
+
+            if not base_text or len(base_text) < 50:
+                # Pas de texte original → régénérer
+                base_text = _build_ad_text(sb, run_id, slug, v, "NEW")
+                if not base_text or len(base_text) < MIN_POST_TEXT_LEN:
+                    print(f"[UNSOLD SKIP] slug={slug} — pas de texte à restaurer", flush=True)
+                    continue
+
+            try:
+                update_post_text(post_id, FB_TOKEN, base_text)
+                upsert_post(sb, {
+                    "slug": slug, "post_id": post_id, "status": "ACTIVE",
+                    "last_updated_at": now, "base_text": base_text, "stock": old_stock,
+                })
+                unsold_count += 1
+                print(f"[UNSOLD] ✅ slug={slug} stock={old_stock} — restauré comme ACTIF", flush=True)
+                log_event(sb, slug, "UNSOLD_RESTORED", {"run_id": run_id, "post_id": post_id, "stock": old_stock})
+                time.sleep(max(1, SLEEP_BETWEEN))
+            except Exception as e:
+                print(f"[ERROR UNSOLD] slug={slug} err={e}", flush=True)
+            continue
 
         # =========================================================
         # SOLD — Marquer le post Facebook comme VENDU
@@ -1491,9 +1557,10 @@ def main() -> None:
 
     print(
         f"OK run_id={run_id} inv_count={len(current)} "
-        f"NEW={len(new_slugs)} PRICE_CHANGED={len(price_changed)} PHOTOS_ADDED={len(photos_added)} SOLD={len(sold_slugs)} "
-        f"posted={posted} updated={updated} sold={sold_count} skipped_dup={skipped_dup} "
-        f"skipped_bad_text={skipped_bad_text} skipped_no_photos={skipped_no_photos}",
+        f"NEW={len(new_slugs)} PRICE_CHANGED={len(price_changed)} "
+        f"PHOTOS_ADDED={len(photos_added)} SOLD={len(sold_slugs)} UNSOLD={len(unsold_slugs)} "
+        f"posted={posted} updated={updated} sold={sold_count} unsold={unsold_count} "
+        f"skipped_dup={skipped_dup} skipped_bad_text={skipped_bad_text} skipped_no_photos={skipped_no_photos}",
         flush=True,
     )
 
