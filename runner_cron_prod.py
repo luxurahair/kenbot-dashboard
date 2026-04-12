@@ -652,6 +652,17 @@ def _build_ad_text(
     price = _vehicle_price_text(v)
     mileage = _vehicle_mileage_text(v)
 
+    # Si le prix est vide, essayer de le récupérer de l'inventaire DB
+    if not price and stock:
+        try:
+            inv_row = sb.table("inventory").select("price_int").eq("stock", stock).limit(1).execute()
+            if inv_row.data and inv_row.data[0].get("price_int"):
+                p = int(inv_row.data[0]["price_int"])
+                price = f"{p:,}".replace(",", " ") + " $"
+                print(f"[PRICE FALLBACK] stock={stock} price_int={p} from inventory DB", flush=True)
+        except Exception:
+            pass
+
     # enrichit v pour que l'AI puisse comprendre un PRICE_CHANGED si besoin
     v_ai = dict(v or {})
     v_ai["old_price"] = old_price
@@ -1085,7 +1096,16 @@ def main() -> None:
 
     # =========================================================
     # VENDU / SOLD — Posts FB dont le véhicule a disparu du site
+    # SÉCURITÉ: Double vérification slug ET stock pour éviter
+    # de marquer VENDU un véhicule encore sur Kennebec
     # =========================================================
+    # Construire un set de tous les stocks actuels sur Kennebec
+    current_stocks = set()
+    for _slug, _v in current.items():
+        _st = (_v.get("stock") or "").strip().upper()
+        if _st:
+            current_stocks.add(_st)
+
     sold_slugs: List[str] = []
     posts_in_db_not_in_site = set(posts_db.keys()) - set(current.keys())
     for slug in posts_in_db_not_in_site:
@@ -1095,6 +1115,17 @@ def main() -> None:
 
         # Skip si déjà marqué SOLD ou pas de post_id
         if post_status == "SOLD" or not post_id:
+            continue
+
+        # SÉCURITÉ: Vérifier que le stock n'existe PAS dans le scrape actuel
+        # (protège contre les changements de slug pour un même véhicule)
+        post_stock = (post_data.get("stock") or "").strip().upper()
+        if post_stock and post_stock in current_stocks:
+            print(
+                f"[SOLD BLOCKED] slug={slug} stock={post_stock} — "
+                f"stock encore sur Kennebec, slug a probablement changé. PAS marqué VENDU.",
+                flush=True,
+            )
             continue
 
         # Skip si le post est très récent (< 2 jours) — possible erreur de scrape
