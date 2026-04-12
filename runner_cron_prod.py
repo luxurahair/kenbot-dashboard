@@ -1143,12 +1143,9 @@ def main() -> None:
                 else:
                     print(f"[PHOTOS_ADDED] Warning: Could not delete old post {old_post_id}, continuing anyway", flush=True)
 
-                # 2. Récupérer le texte original ou en générer un nouveau
-                base_text = old_post.get("base_text") or ""
-                if not base_text or len(base_text) < MIN_POST_TEXT_LEN:
-                    # FIX #2: Corriger l'ordre des arguments !
-                    # Signature: _build_ad_text(sb, run_id, slug, v, event)
-                    base_text = _build_ad_text(sb, run_id, slug, v, "NEW")
+                # 2. TOUJOURS régénérer le texte pour PHOTOS_ADDED
+                #    (l'ancien texte est probablement "Photos suivront" ou sans AI)
+                base_text = _build_ad_text(sb, run_id, slug, v, "NEW")
 
                 # 3. Créer le nouveau post avec les vraies photos
                 media_ids = publish_photos_unpublished(
@@ -1180,7 +1177,6 @@ def main() -> None:
                         "no_photo": False,  # Maintenant il a de vraies photos
                         "photo_count": len(photos),
                         "stock": stock,
-                        "old_post_id": old_post_id,  # Garder une trace de l'ancien
                     },
                 )
 
