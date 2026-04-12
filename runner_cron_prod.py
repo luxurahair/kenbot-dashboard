@@ -1628,6 +1628,77 @@ def main() -> None:
         flush=True,
     )
 
+    # =========================================================
+    # CLEANUP: Corriger les posts existants (double footer)
+    # Tourne à chaque cron, corrige max 10 posts par run
+    # =========================================================
+    CLEANUP_LIMIT = 10
+    cleaned = 0
+    try:
+        all_active = sb.table("posts").select("slug,stock,post_id,base_text,status").eq("status", "ACTIVE").execute()
+        for row in (all_active.data or []):
+            if cleaned >= CLEANUP_LIMIT:
+                break
+            post_id = (row.get("post_id") or "").strip()
+            base_text = row.get("base_text") or ""
+            slug = row.get("slug") or ""
+            stock_r = (row.get("stock") or "").strip().upper()
+
+            if not post_id or not base_text:
+                continue
+
+            # Compter les occurrences de "accepte les échanges" (toutes variantes)
+            ll = base_text.lower()
+            echange_count = sum([
+                ll.count("accepte les \u00e9changes"),
+                ll.count("accepte les echanges"),
+            ])
+            if echange_count < 2:
+                continue
+
+            # Nettoyer: garder seulement la première occurrence
+            lines = base_text.split("\n")
+            new_lines = []
+            footer_seen = False
+            skip_mode = False
+            for line in lines:
+                low = line.lower().strip()
+                is_echange = ("accepte les" in low and "change" in low)
+                is_envoi = ("envoie-moi les photos" in low)
+
+                if is_echange:
+                    if not footer_seen:
+                        footer_seen = True
+                        new_lines.append(line)
+                    else:
+                        skip_mode = True
+                    continue
+                if skip_mode and is_envoi:
+                    skip_mode = False
+                    continue
+                skip_mode = False
+                new_lines.append(line)
+
+            cleaned_text = "\n".join(new_lines).strip()
+
+            if cleaned_text != base_text.strip() and len(cleaned_text) > 100:
+                try:
+                    update_post_text(post_id, FB_TOKEN, cleaned_text)
+                    upsert_post(sb, {
+                        "slug": slug, "post_id": post_id, "base_text": cleaned_text,
+                        "last_updated_at": utc_now_iso(), "stock": stock_r,
+                    })
+                    cleaned += 1
+                    print(f"[CLEANUP] slug={slug} stock={stock_r} double footer corrige", flush=True)
+                    time.sleep(max(1, SLEEP_BETWEEN))
+                except Exception as e:
+                    print(f"[CLEANUP ERROR] slug={slug} err={e}", flush=True)
+    except Exception as e:
+        print(f"[CLEANUP] Skipped: {e}", flush=True)
+
+    if cleaned:
+        print(f"[CLEANUP DONE] {cleaned} posts nettoyes", flush=True)
+
     _run_meta_compare_safe()
 
 if __name__ == "__main__":
