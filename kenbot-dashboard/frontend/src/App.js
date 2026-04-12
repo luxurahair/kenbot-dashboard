@@ -990,9 +990,9 @@ function CompareTab() {
 
   useEffect(() => { fetchCompare(); }, [fetchCompare]);
 
-  // Auto-refresh toutes les 2 minutes
+  // Auto-refresh 2 fois par jour (12h = 43200000ms)
   useEffect(() => {
-    const interval = setInterval(fetchCompare, 120000);
+    const interval = setInterval(fetchCompare, 43200000);
     return () => clearInterval(interval);
   }, [fetchCompare]);
 
