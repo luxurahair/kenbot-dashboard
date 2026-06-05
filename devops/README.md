@@ -16,7 +16,6 @@ python devops/kenbotctl.py protect --project kenbot
 
 # === Luxura (Cheveux) ===
 python devops/kenbotctl.py render-list --project luxura
-
 Commande,Description
 render-list,Liste tous les services Render
 env-list --service XXX,Liste les variables d’un service
