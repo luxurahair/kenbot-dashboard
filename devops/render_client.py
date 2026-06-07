@@ -1,6 +1,7 @@
 # devops/render_client.py
 import requests
 import os
+import json
 
 class RenderClient:
     def __init__(self):
@@ -19,31 +20,42 @@ class RenderClient:
                 print(f"✅ {len(services)} services trouvés sur Render")
                 return services
             else:
-                print(f"❌ Erreur API Render: {resp.status_code}")
+                print(f"❌ Erreur API: {resp.status_code} - {resp.text[:300]}")
                 return []
         except Exception as e:
             print(f"❌ Erreur connexion: {e}")
             return []
 
     def get_service_name(self, service):
-        """Extraction robuste du nom"""
         if not isinstance(service, dict):
-            return "N/A"
+            return str(service)[:50]
         
-        # Différentes structures possibles de l'API Render
-        name = service.get('name')
-        if name:
-            return name
+        # Essayer plusieurs chemins possibles
+        for key in ['name', 'service.name', 'displayName']:
+            if '.' in key:
+                parts = key.split('.')
+                val = service
+                for p in parts:
+                    val = val.get(p) if isinstance(val, dict) else None
+                    if val is None:
+                        break
+                if val:
+                    return val
+            elif service.get(key):
+                return service.get(key)
         
-        service_obj = service.get('service') or {}
-        return service_obj.get('name') or service.get('id') or "N/A"
+        return service.get('id', 'N/A')[:20]
 
     def get_service_status(self, service):
-        """Extraction robuste du statut"""
         if not isinstance(service, dict):
             return "unknown"
-        
-        return (service.get('status') or 
-                service.get('state') or 
-                service.get('service', {}).get('status') or 
-                "unknown")
+        return service.get('status') or service.get('state') or "unknown"
+
+
+# Pour debug : afficher la structure une fois
+if __name__ == "__main__":
+    client = RenderClient()
+    services = client.list_services()
+    if services:
+        print("\n--- Structure du premier service (debug) ---")
+        print(json.dumps(services[0], indent=2)[:800] + "...")
