@@ -19,7 +19,7 @@ class RenderClient:
                 print(f"✅ {len(services)} services trouvés sur Render")
                 return services
             else:
-                print(f"❌ Erreur API: {resp.status_code}")
+                print(f"❌ Erreur API Render: {resp.status_code}")
                 return []
         except Exception as e:
             print(f"❌ Erreur connexion: {e}")
@@ -27,14 +27,23 @@ class RenderClient:
 
     def get_service_name(self, service):
         """Extraction robuste du nom"""
-        if isinstance(service, dict):
-            return (service.get('name') or 
-                    service.get('service', {}).get('name') or 
-                    service.get('id') or "N/A")
-        return "N/A"
+        if not isinstance(service, dict):
+            return "N/A"
+        
+        # Différentes structures possibles de l'API Render
+        name = service.get('name')
+        if name:
+            return name
+        
+        service_obj = service.get('service') or {}
+        return service_obj.get('name') or service.get('id') or "N/A"
 
     def get_service_status(self, service):
         """Extraction robuste du statut"""
-        if isinstance(service, dict):
-            return service.get('status') or service.get('state') or "unknown"
-        return "unknown"
+        if not isinstance(service, dict):
+            return "unknown"
+        
+        return (service.get('status') or 
+                service.get('state') or 
+                service.get('service', {}).get('status') or 
+                "unknown")
