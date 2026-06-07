@@ -1,11 +1,16 @@
 # devops/render_client.py
 import requests
 import os
-import json
+import logging
+
+logging.basicConfig(level=logging.INFO)
+log = logging.getLogger(__name__)
 
 class RenderClient:
     def __init__(self):
         self.api_key = os.getenv("RENDER_API_KEY")
+        if not self.api_key:
+            log.error("❌ RENDER_API_KEY manquante dans .secrets.env")
         self.headers = {
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json"
@@ -13,48 +18,43 @@ class RenderClient:
         self.base_url = "https://api.render.com/v1"
 
     def list_services(self):
+        """Liste tous les services Render (avec pagination si besoin)"""
         try:
-            resp = requests.get(f"{self.base_url}/services", headers=self.headers, timeout=20)
-            if resp.ok:
-                services = resp.json()
-                print(f"✅ {len(services)} services trouvés sur Render\n")
-                return services
-            else:
-                print(f"❌ Erreur API: {resp.status_code} - {resp.text[:200]}")
-                return []
+            resp = requests.get(
+                f"{self.base_url}/services?limit=100",
+                headers=self.headers,
+                timeout=15
+            )
+            resp.raise_for_status()
+            services = resp.json()
+            print(f"✅ {len(services)} services trouvés sur Render")
+            return services
         except Exception as e:
-            print(f"❌ Erreur connexion: {e}")
+            log.error(f"Erreur Render API: {e}")
             return []
 
-    def get_service_name(self, s):
-        if not isinstance(s, dict):
+    def get_name(self, item):
+        """Extraction robuste du nom"""
+        if not isinstance(item, dict):
             return "N/A"
-        
-        # Essayer tous les chemins possibles
-        for key in ['name', 'service.name', 'displayName', 'hostname']:
-            if '.' in key:
-                val = s
-                for k in key.split('.'):
-                    val = val.get(k) if isinstance(val, dict) else None
-                    if val is None:
-                        break
-                if val:
-                    return str(val)
-            elif s.get(key):
-                return str(s.get(key))
-        
-        return s.get('id', 'N/A')[:30]
+        return (item.get("name") or 
+                item.get("service", {}).get("name") or 
+                item.get("displayName") or 
+                item.get("id") or "N/A")
 
-    def get_service_status(self, s):
-        if not isinstance(s, dict):
+    def get_status(self, item):
+        """Extraction robuste du statut"""
+        if not isinstance(item, dict):
             return "unknown"
-        return s.get('status') or s.get('state') or "unknown"
+        return (item.get("status") or 
+                item.get("state") or 
+                item.get("service", {}).get("status") or 
+                "unknown")
 
 
-# Debug
+# Test rapide si exécuté directement
 if __name__ == "__main__":
     client = RenderClient()
     services = client.list_services()
-    if services:
-        print("--- DEBUG Premier service ---")
-        print(json.dumps(services[0], indent=2)[:1500])
+    for s in services:
+        print(f"  • {client.get_name(s):40s} → {client.get_status(s)}")
