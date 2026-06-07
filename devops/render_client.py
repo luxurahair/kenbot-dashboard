@@ -2,8 +2,8 @@
 import requests
 import os
 import logging
+from typing import List, Dict
 
-logging.basicConfig(level=logging.INFO)
 log = logging.getLogger(__name__)
 
 class RenderClient:
@@ -11,29 +11,34 @@ class RenderClient:
         self.api_key = os.getenv("RENDER_API_KEY")
         if not self.api_key:
             log.error("❌ RENDER_API_KEY manquante dans .secrets.env")
+            raise RuntimeError("RENDER_API_KEY manquante")
+        
         self.headers = {
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json"
         }
         self.base_url = "https://api.render.com/v1"
 
-    def list_services(self):
-        """Liste tous les services Render (avec pagination si besoin)"""
+    def list_services(self, limit: int = 100) -> List[Dict]:
+        """Liste tous les services Render"""
         try:
             resp = requests.get(
-                f"{self.base_url}/services?limit=100",
+                f"{self.base_url}/services?limit={limit}",
                 headers=self.headers,
-                timeout=15
+                timeout=20
             )
             resp.raise_for_status()
             services = resp.json()
             print(f"✅ {len(services)} services trouvés sur Render")
             return services
+        except requests.HTTPError as e:
+            log.error(f"Render API Error {e.response.status_code}: {e.response.text[:300]}")
+            return []
         except Exception as e:
-            log.error(f"Erreur Render API: {e}")
+            log.error(f"Erreur connexion Render: {e}")
             return []
 
-    def get_name(self, item):
+    def get_name(self, item: Dict) -> str:
         """Extraction robuste du nom"""
         if not isinstance(item, dict):
             return "N/A"
@@ -42,7 +47,7 @@ class RenderClient:
                 item.get("displayName") or 
                 item.get("id") or "N/A")
 
-    def get_status(self, item):
+    def get_status(self, item: Dict) -> str:
         """Extraction robuste du statut"""
         if not isinstance(item, dict):
             return "unknown"
@@ -52,7 +57,7 @@ class RenderClient:
                 "unknown")
 
 
-# Test rapide si exécuté directement
+# Test rapide
 if __name__ == "__main__":
     client = RenderClient()
     services = client.list_services()
