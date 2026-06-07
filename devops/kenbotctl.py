@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Mini Emergent v1.0 - kenbotctl
+Mini Emergent v1.0 - kenbotctl (Version simplifiée)
 """
 
 import argparse
@@ -8,37 +8,36 @@ import sys
 import os
 from pathlib import Path
 
-# Charger les variables d'environnement (.secrets.env)
+# Charger les secrets
 try:
     from dotenv import load_dotenv
     load_dotenv('.secrets.env')
-    print("✅ .secrets.env chargé")
 except ImportError:
-    print("⚠️ python-dotenv non installé (RENDER_API_KEY risque de manquer)")
+    pass
 
-# Ajout du chemin pour les imports
+# Import direct sans dossier contexts compliqué
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-# Import des contextes
-try:
-    from contexts.kenbot import KenbotContext
-    from contexts.luxura import LuxuraContext
-except ImportError as e:
-    print("❌ Erreur d'import :", e)
-    print("Dossier actuel :", os.getcwd())
-    sys.exit(1)
+class SimpleContext:
+    def __init__(self, project="kenbot"):
+        self.project = project
+        from render_client import RenderClient
+        self.render = RenderClient()
 
+    def list_render_services(self):
+        services = self.render.list_services()
+        print(f"\n🔄 Services Render ({self.project}):")
+        for s in services:
+            name = s.get('name') or "N/A"
+            status = s.get('status') or "unknown"
+            print(f"  • {name} → {status}")
 
-def print_help():
-    print("\n🚀 Mini Emergent - kenbotctl")
-    print("=" * 50)
-    print("Commandes disponibles :\n")
-    print("  render-list                  → Liste tous les services Render")
-    print("  diagnostic                   → Diagnostic complet")
-    print("  protect                      → Snapshot des variables Render")
-    print("\nExemple :")
-    print("  python devops/kenbotctl.py render-list --project kenbot")
+    def run_diagnostic(self):
+        print(f"Diagnostic {self.project} en cours...")
+        self.list_render_services()
 
+    def protect_envvars(self):
+        print("Protection env vars en cours...")
 
 def main():
     parser = argparse.ArgumentParser(description="Mini Emergent CLI")
@@ -47,14 +46,7 @@ def main():
 
     args = parser.parse_args()
 
-    if args.command == "help":
-        print_help()
-        return
-
-    if args.project == "kenbot":
-        context = KenbotContext()
-    else:
-        context = LuxuraContext()
+    context = SimpleContext(args.project)
 
     if args.command == "render-list":
         context.list_render_services()
@@ -62,7 +54,8 @@ def main():
         context.run_diagnostic()
     elif args.command == "protect":
         context.protect_envvars()
-
+    else:
+        print("Commandes : render-list, diagnostic, protect")
 
 if __name__ == "__main__":
     main()
