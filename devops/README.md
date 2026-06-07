@@ -1,24 +1,22 @@
 # 🚀 Mini Emergent v1.0
 
-Outil interne pour gérer **Kenbot** et **Luxura** en toute sécurité.
-
----
+Outil complémentaire pour gérer Render, GitHub, secrets et diagnostics.
 
 ## Commandes principales
 
 ```bash
 cd ~/kenbot-dashboard
 
-# === Kenbot (Automobile) ===
+# Kenbot
 python devops/kenbotctl.py render-list --project kenbot
 python devops/kenbotctl.py diagnostic --project kenbot
 python devops/kenbotctl.py protect --project kenbot
 
-# === Luxura (Cheveux) ===
+# Luxura
 python devops/kenbotctl.py render-list --project luxura
-Commande,Description
-render-list,Liste tous les services Render
-env-list --service XXX,Liste les variables d’un service
-diagnostic,Diagnostic complet du système
-protect,Snapshot des variables Render
-restart --service XXX,Redémarre un service Render
+Commandes disponibles
+
+render-list → Liste les services Render
+diagnostic → Diagnostic complet
+protect → Snapshot des variables Render
+restart --service XXX → Redémarre un service
