@@ -17,45 +17,43 @@ class RenderClient:
             resp = requests.get(f"{self.base_url}/services", headers=self.headers, timeout=15)
             if resp.ok:
                 services = resp.json()
-                print(f"✅ {len(services)} services trouvés sur Render")
+                print(f"✅ {len(services)} services trouvés sur Render\n")
                 return services
             else:
-                print(f"❌ Erreur API: {resp.status_code} - {resp.text[:300]}")
+                print(f"❌ Erreur API: {resp.status_code}")
                 return []
         except Exception as e:
             print(f"❌ Erreur connexion: {e}")
             return []
 
-    def get_service_name(self, service):
-        if not isinstance(service, dict):
-            return str(service)[:50]
+    def get_service_name(self, s):
+        if not isinstance(s, dict):
+            return str(s)[:30]
         
-        # Essayer plusieurs chemins possibles
-        for key in ['name', 'service.name', 'displayName']:
-            if '.' in key:
-                parts = key.split('.')
-                val = service
-                for p in parts:
-                    val = val.get(p) if isinstance(val, dict) else None
+        # Essayer tous les chemins possibles
+        for path in ['name', 'service.name', 'displayName', 'id']:
+            if '.' in path:
+                val = s
+                for key in path.split('.'):
+                    val = val.get(key) if isinstance(val, dict) else None
                     if val is None:
                         break
                 if val:
-                    return val
-            elif service.get(key):
-                return service.get(key)
-        
-        return service.get('id', 'N/A')[:20]
+                    return str(val)
+            elif s.get(path):
+                return str(s.get(path))
+        return "N/A"
 
-    def get_service_status(self, service):
-        if not isinstance(service, dict):
+    def get_service_status(self, s):
+        if not isinstance(s, dict):
             return "unknown"
-        return service.get('status') or service.get('state') or "unknown"
+        return s.get('status') or s.get('state') or "unknown"
 
 
-# Pour debug : afficher la structure une fois
+# Debug temporaire
 if __name__ == "__main__":
     client = RenderClient()
     services = client.list_services()
     if services:
-        print("\n--- Structure du premier service (debug) ---")
-        print(json.dumps(services[0], indent=2)[:800] + "...")
+        print("--- DEBUG Premier service ---")
+        print(json.dumps(services[0], indent=2)[:1000])
