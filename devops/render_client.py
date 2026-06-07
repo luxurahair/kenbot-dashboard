@@ -30,30 +30,31 @@ class RenderClient:
         if not isinstance(s, dict):
             return str(s)[:30]
         
-        # Essayer tous les chemins possibles
-        for path in ['name', 'service.name', 'displayName', 'id']:
-            if '.' in path:
-                val = s
-                for key in path.split('.'):
-                    val = val.get(key) if isinstance(val, dict) else None
-                    if val is None:
-                        break
-                if val:
-                    return str(val)
-            elif s.get(path):
-                return str(s.get(path))
+        # Essayer tous les chemins possibles dans la structure Render
+        candidates = [
+            s.get('name'),
+            s.get('service', {}).get('name'),
+            s.get('displayName'),
+            s.get('id')
+        ]
+        for name in candidates:
+            if name:
+                return str(name)
         return "N/A"
 
     def get_service_status(self, s):
         if not isinstance(s, dict):
             return "unknown"
-        return s.get('status') or s.get('state') or "unknown"
+        return (s.get('status') or 
+                s.get('state') or 
+                s.get('service', {}).get('status') or 
+                "unknown")
 
 
-# Debug temporaire
+# === DEBUG TEMPORAIRE ===
 if __name__ == "__main__":
     client = RenderClient()
     services = client.list_services()
-    if services:
-        print("--- DEBUG Premier service ---")
-        print(json.dumps(services[0], indent=2)[:1000])
+    if services and len(services) > 0:
+        print("--- DEBUG STRUCTURE DU PREMIER SERVICE ---")
+        print(json.dumps(services[0], indent=2)[:1200])
