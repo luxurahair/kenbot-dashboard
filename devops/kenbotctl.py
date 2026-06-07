@@ -6,6 +6,15 @@ Mini Emergent v1.0 - kenbotctl
 import argparse
 import sys
 import os
+from pathlib import Path
+
+# Charger les variables d'environnement (.secrets.env)
+try:
+    from dotenv import load_dotenv
+    load_dotenv('.secrets.env')
+    print("✅ .secrets.env chargé")
+except ImportError:
+    print("⚠️ python-dotenv non installé (RENDER_API_KEY risque de manquer)")
 
 # Ajout du chemin pour les imports
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
