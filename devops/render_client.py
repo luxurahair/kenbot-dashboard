@@ -15,24 +15,42 @@ class RenderClient:
     def list_services(self):
         try:
             resp = requests.get(f"{self.base_url}/services?limit=100", headers=self.headers, timeout=15)
-            print(f"Status code: {resp.status_code}")
             if resp.ok:
                 services = resp.json()
-                print(f"✅ {len(services)} services trouvés")
+                print(f"✅ {len(services)} services trouvés sur Render\n")
                 return services
             else:
-                print(f"❌ Erreur: {resp.text[:500]}")
+                print(f"❌ Erreur API: {resp.status_code}")
                 return []
         except Exception as e:
-            print(f"❌ Exception: {e}")
+            print(f"❌ Erreur connexion: {e}")
             return []
 
-# Debug complet
+    def get_name(self, item):
+        if not isinstance(item, dict):
+            return "N/A"
+        
+        # Toutes les possibilités connues de Render API
+        possible = [
+            item.get("name"),
+            item.get("service", {}).get("name"),
+            item.get("displayName"),
+            item.get("hostname"),
+            item.get("id")
+        ]
+        for name in possible:
+            if name and str(name).strip():
+                return str(name)
+        return "N/A"
+
+# Debug
 if __name__ == "__main__":
     client = RenderClient()
     services = client.list_services()
+    print("\n=== DEBUG - PREMIER SERVICE (RAW) ===")
     if services:
-        print("\n=== DEBUG STRUCTURE DU PREMIER SERVICE (RAW) ===")
-        print(json.dumps(services[0], indent=2))
-        print("\n=== NOMS DES CLÉS DISPONIBLES ===")
-        print(list(services[0].keys()))
+        print(json.dumps(services[0], indent=2)[:2000])
+    print("\n=== LISTE DES SERVICES ===")
+    for s in services:
+        name = client.get_name(s)
+        print(f"  • {name}")
