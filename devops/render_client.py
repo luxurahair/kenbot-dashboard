@@ -15,26 +15,39 @@ class RenderClient:
         self.base_url = "https://api.render.com/v1"
 
     def list_services(self):
-        resp = requests.get(f"{self.base_url}/services?limit=100", headers=self.headers, timeout=15)
-        if resp.ok:
-            return resp.json()
-        else:
-            print(f"❌ Erreur API: {resp.status_code}")
+        try:
+            resp = requests.get(f"{self.base_url}/services?limit=100", headers=self.headers, timeout=15)
+            if resp.ok:
+                services = resp.json()
+                print(f"✅ {len(services)} services trouvés sur Render")
+                return services
+            else:
+                print(f"❌ Erreur API: {resp.status_code}")
+                return []
+        except Exception as e:
+            print(f"❌ Erreur connexion: {e}")
             return []
 
     def get_name(self, item):
         if not isinstance(item, dict):
             return "N/A"
-        return (item.get("name") or 
-                item.get("service", {}).get("name") or 
-                item.get("displayName") or "N/A")
+        service = item.get("service") or item
+        return service.get("name") or item.get("name") or "N/A"
 
     def get_status(self, item):
         if not isinstance(item, dict):
             return "unknown"
-        # Meilleure extraction du statut Render
-        for data in [item, item.get("service", {}), item.get("latestDeploy", {})]:
-            for key in ["status", "state", "currentStatus", "status"]:
-                if data.get(key):
-                    return data.get(key)
-        return "unknown"
+        
+        service = item.get("service") or item
+        
+        # Pour les cron jobs
+        if service.get("suspended") == "not_suspended":
+            return "active"
+        if service.get("suspended") == "suspended":
+            return "suspended"
+        
+        # Pour les autres services
+        return (service.get("status") or 
+                service.get("state") or 
+                service.get("currentStatus") or 
+                "unknown")
