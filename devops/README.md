@@ -42,10 +42,11 @@ python devops/kenbotctl.py env-list --service kenbot-news-publisher
 python devops/kenbotctl.py snapshot                       # 3 projets
 python devops/kenbotctl.py snapshot --project kenbot      # un seul
 
-# === Diagnostic complet ===
+# === Diagnostic complet (via CLI ou script direct) ===
+python devops/kenbotctl.py diagnostic --project kenbot
 python devops/diagnostic.py --project kenbot
 
-# === Snapshot direct (équivalent) ===
+# === Snapshot direct (équivalent CLI) ===
 python devops/protect_render_envvars.py --project all
 ```
 
