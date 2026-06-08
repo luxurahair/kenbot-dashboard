@@ -1,6 +1,7 @@
 # devops/render_client.py
 import requests
 import os
+import json
 
 class RenderClient:
     def __init__(self):
@@ -38,6 +39,10 @@ class RenderClient:
     def get_status(self, item):
         if not isinstance(item, dict):
             return "unknown"
-        # Meilleure détection du statut
-        service = item.get("service") or item
-        return service.get("status") or service.get("state") or "unknown"
+        
+        # Essayer tous les chemins possibles
+        for path in [item, item.get("service", {}), item.get("latestDeploy", {})]:
+            status = path.get("status") or path.get("state") or path.get("status")
+            if status:
+                return status
+        return "unknown"
