@@ -49,7 +49,7 @@ class RenderEnvProtector:
 def main():
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument("--project", choices=["kenbot", "luxura"], default="kenbot")
+    parser.add_argument("--project", choices=["kenbot", "luxura", "calcauto"], default="kenbot")
     args = parser.parse_args()
 
     protector = RenderEnvProtector(args.project)
