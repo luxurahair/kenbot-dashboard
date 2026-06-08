@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Mini Emergent V2 - Version Stable
+Mini Emergent V3 - Version Puissante & Stable
 """
 
 import argparse
@@ -14,40 +14,57 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from render_client import RenderClient
 
 def main():
-    parser = argparse.ArgumentParser(description="Mini Emergent V2")
-    parser.add_argument("command", choices=["kenbot", "luxura", "calcauto", "all", "help"], nargs='?', default="help")
+    parser = argparse.ArgumentParser(description="Mini Emergent V3")
+    parser.add_argument("command", choices=["kenbot", "luxura", "calcauto", "all", "restart", "env-list", "snapshot", "help"], nargs='?', default="help")
+    parser.add_argument("--service", help="Nom du service (ex: kenbot-runner)")
+    parser.add_argument("--key", help="Clé à modifier (avec env-set)")
+    parser.add_argument("--value", help="Nouvelle valeur")
 
     args = parser.parse_args()
 
     client = RenderClient()
 
     if args.command == "help":
-        print("\n🚀 Mini Emergent V2")
-        print("   kenbot     → Services Kenbot (dashboard, beauce, news, FB regen, competitors)")
-        print("   luxura     → Services Luxura (multi-tape, itip, genius, halo)")
-        print("   calcauto   → Services CalcAuto AiPro (OCR scan + master codes)")
-        print("   all        → Tous les services")
+        print("\n🚀 Mini Emergent V3 - Commandes")
+        print("   kenbot          → Services Kenbot")
+        print("   luxura          → Services Luxura")
+        print("   calcauto        → Services CalcAuto")
+        print("   all             → Tous les services")
+        print("   restart --service NOM")
+        print("   env-list --service NOM")
+        print("   snapshot")
         return
 
+    # Commandes avancées
+    if args.command == "restart" and args.service:
+        print(f"🔄 Redémarrage de {args.service}...")
+        # On implémentera la vraie fonction plus tard
+        print("✅ Commande restart reçue (implémentation en cours)")
+        return
+
+    if args.command == "env-list" and args.service:
+        print(f"📋 Variables d'environnement pour {args.service}...")
+        print("✅ Commande env-list reçue (implémentation en cours)")
+        return
+
+    if args.command == "snapshot":
+        print("💾 Création d'un snapshot complet des env vars Render...")
+        print("✅ Snapshot demandé (fonction en cours de développement)")
+        return
+
+    # Liste des services
     services = client.list_services()
     print(f"\n🔄 Services Render → {args.command.upper()}\n")
 
-    def name_of(s):
-        return client.get_name(s).lower()
+    filters = {
+        "kenbot": ["kenbot", "beauce", "facebook"],
+        "luxura": ["luxura"],
+        "calcauto": ["calcauto", "aipro"],
+        "all": [""]
+    }
 
-    if args.command == "all":
-        filtered = services
-    elif args.command == "calcauto":
-        filtered = [s for s in services if any(k in name_of(s) for k in ["calcauto", "aipro"])]
-    elif args.command == "kenbot":
-        # 2026-06-08 : CalcAuto séparé dans son propre contexte → exclu d'ici
-        filtered = [
-            s for s in services
-            if any(k in name_of(s) for k in ["kenbot", "beauce", "facebook"])
-            and not any(k in name_of(s) for k in ["calcauto", "aipro"])
-        ]
-    else:  # luxura
-        filtered = [s for s in services if "luxura" in name_of(s)]
+    kw_list = filters.get(args.command, [""])
+    filtered = [s for s in services if any(k in client.get_name(s).lower() for k in kw_list if k)]
 
     for s in filtered:
         name = client.get_name(s)
