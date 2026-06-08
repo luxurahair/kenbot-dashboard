@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Mini Emergent V2 - Version Puissante & Simple
+Mini Emergent V2 - Version Stable
 """
 
 import argparse
@@ -15,46 +15,28 @@ from render_client import RenderClient
 
 def main():
     parser = argparse.ArgumentParser(description="Mini Emergent V2")
-    parser.add_argument("command", choices=["kenbot", "luxura", "all", "status", "restart", "help"], nargs='?', default="help")
-    parser.add_argument("--service", help="Nom du service à redémarrer (ex: kenbot-runner)")
+    parser.add_argument("command", choices=["kenbot", "luxura", "all", "help"], nargs='?', default="help")
 
     args = parser.parse_args()
 
     client = RenderClient()
 
     if args.command == "help":
-        print("\n🚀 Mini Emergent V2 - Commandes simples :")
-        print("   kenbot          → Voir seulement Kenbot")
-        print("   luxura          → Voir seulement Luxura")
-        print("   all             → Voir tous les services")
-        print("   status          → Diagnostic complet")
-        print("   restart --service NOM   → Redémarrer un service")
+        print("\n🚀 Mini Emergent V2")
+        print("   kenbot     → Services Kenbot")
+        print("   luxura     → Services Luxura")
+        print("   all        → Tous les services")
         return
 
-    if args.command == "status":
-        print("🔍 Diagnostic complet en cours...")
-        client.list_services()
-        print("✅ Système OK")
-        return
-
-    if args.command == "restart" and args.service:
-        print(f"🔄 Redémarrage de {args.service}...")
-        # On ajoutera la vraie fonction restart bientôt
-        print("⏳ Fonction restart en cours de création...")
-        return
-
-    # Liste filtrée
     services = client.list_services()
     print(f"\n🔄 Services Render → {args.command.upper()}\n")
 
-    keywords = {
-        "kenbot": ["kenbot", "beauce", "calcauto", "facebook"],
-        "luxura": ["luxura"],
-        "all": [""]
-    }
-
-    kw_list = keywords.get(args.command, [""])
-    filtered = [s for s in services if any(k in client.get_name(s).lower() for k in kw_list if k)]
+    if args.command == "all":
+        filtered = services
+    elif args.command == "kenbot":
+        filtered = [s for s in services if any(k in client.get_name(s).lower() for k in ["kenbot", "beauce", "calcauto", "facebook"])]
+    else:  # luxura
+        filtered = [s for s in services if "luxura" in client.get_name(s).lower()]
 
     for s in filtered:
         name = client.get_name(s)
