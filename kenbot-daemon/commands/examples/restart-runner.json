@@ -1,0 +1,4 @@
+{
+  "action": "restart",
+  "service": "kenbot-runner"
+}

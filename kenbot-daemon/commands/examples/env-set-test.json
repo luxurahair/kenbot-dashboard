@@ -1,0 +1,6 @@
+{
+  "action": "env-set",
+  "service": "kenbot-runner",
+  "key": "MY_KEY",
+  "value": "ma_valeur"
+}

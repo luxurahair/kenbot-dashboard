@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.dgauto.kenbot-daemon</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/usr/bin/python3</string>
+        <string>/Users/danielgiroux/Desktop/kenbot-dashboard/kenbot-daemon/kenbot_daemon.py</string>
+    </array>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>KENBOT_REPO_DIR</key>
+        <string>/Users/danielgiroux/Desktop/kenbot-dashboard</string>
+        <key>KENBOT_DAEMON_DIR</key>
+        <string>/Users/danielgiroux/Desktop/kenbot-dashboard/kenbot-daemon</string>
+        <key>KENBOT_WATCHDOG_INTERVAL</key>
+        <string>1800</string>
+        <key>KENBOT_HTTP_PORT</key>
+        <string>7777</string>
+        <key>KENBOT_DAEMON_TOKEN</key>
+        <string>CHANGE_ME_secret_token_for_webhook</string>
+        <key>KENBOT_NOTIFY_MACOS</key>
+        <string>1</string>
+        <key>KENBOT_ALLOW_SHELL</key>
+        <string>0</string>
+    </dict>
+    <key>WorkingDirectory</key>
+    <string>/Users/danielgiroux/Desktop/kenbot-dashboard</string>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>StandardOutPath</key>
+    <string>/Users/danielgiroux/Desktop/kenbot-dashboard/kenbot-daemon/logs/launchd.out.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/danielgiroux/Desktop/kenbot-dashboard/kenbot-daemon/logs/launchd.err.log</string>
+</dict>
+</plist>

@@ -1,0 +1,11 @@
+# Daemon runtime - never commit
+logs/
+heartbeat.txt
+commands/inbox/*.json
+commands/processing/*.json
+commands/outbox/*.json
+__pycache__/
+*.pyc
+# Garder les exemples + les .gitkeep
+!commands/examples/*.json
+!commands/**/.gitkeep
