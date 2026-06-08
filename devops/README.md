@@ -1,45 +1,75 @@
-# 🚀 Mini Emergent v1.1
+# 🚀 Mini Emergent v3
 
-Outil complémentaire pour gérer Render, GitHub, secrets et diagnostics
-par **projet logique** (Kenbot, Luxura, CalcAuto).
+CLI unifiée pour gérer les services Render des **3 projets logiques** :
+- 🚗 **Kenbot** (Auto)
+- 💇 **Luxura** (Cheveux)
+- 🧾 **CalcAuto AiPro** (OCR factures Stellantis)
 
-## Commandes principales
+## Architecture
+
+```
+devops/
+├── kenbotctl.py             # CLI principal — toutes les commandes
+├── render_client.py         # Wrapper Render API (list/env/restart)
+├── diagnostic.py            # Diagnostic complet par projet
+├── protect_render_envvars.py# Snapshot RÉEL des env vars + alertes
+└── contexts/
+    ├── __init__.py          # 3 BaseContext (KENBOT, LUXURA, CALCAUTO)
+    ├── base.py              # Une SEULE classe paramétrée
+    ├── kenbot.py            # rétro-compat → KENBOT
+    ├── luxura.py            # rétro-compat → LUXURA
+    └── calcauto.py          # rétro-compat → CALCAUTO
+```
+
+## Commandes
 
 ```bash
 cd ~/kenbot-dashboard
 
-# === Kenbot (Automobile) ===
-python devops/kenbotctl.py kenbot
+# === Liste services par projet ===
+python devops/kenbotctl.py kenbot      # Kenbot uniquement
+python devops/kenbotctl.py luxura      # Luxura uniquement
+python devops/kenbotctl.py calcauto    # CalcAuto uniquement
+python devops/kenbotctl.py all         # Tous (33 services)
+
+# === Redémarrer un service ===
+python devops/kenbotctl.py restart --service kenbot-dashboard-api
+
+# === Lister les env vars d'un service ===
+python devops/kenbotctl.py env-list --service kenbot-news-publisher
+
+# === Snapshot des env vars (alerte si vars critiques manquantes) ===
+python devops/kenbotctl.py snapshot                       # 3 projets
+python devops/kenbotctl.py snapshot --project kenbot      # un seul
+
+# === Diagnostic complet ===
 python devops/diagnostic.py --project kenbot
-python devops/protect_render_envvars.py --project kenbot
 
-# === Luxura (Cheveux) ===
-python devops/kenbotctl.py luxura
-python devops/diagnostic.py --project luxura
-python devops/protect_render_envvars.py --project luxura
-
-# === CalcAuto AiPro (OCR factures Stellantis) ===
-python devops/kenbotctl.py calcauto
-python devops/diagnostic.py --project calcauto
-python devops/protect_render_envvars.py --project calcauto
-
-# === Tous les services ===
-python devops/kenbotctl.py all
+# === Snapshot direct (équivalent) ===
+python devops/protect_render_envvars.py --project all
 ```
 
-## Projets et services associés
+## Filtres par projet
 
-| Projet     | Mots-clés détectés          | Exemples de services Render                                      |
-|------------|------------------------------|------------------------------------------------------------------|
-| `kenbot`   | `kenbot`, `beauce`, `facebook` (exclut `calcauto`) | kenbot-dashboard-api, kenbot-beauce-*, kenbot-news-*, kenbot-competitors-api |
-| `luxura`   | `luxura`                     | luxura-multi-tape, luxura-multi-itip, luxura-multi-genius, luxura-multi-halo |
-| `calcauto` | `calcauto`, `aipro`          | calcauto-aipro                                                   |
+| Projet     | Mots-clés                    | Exclusions          | Services |
+|------------|------------------------------|---------------------|----------|
+| `kenbot`   | `kenbot`, `beauce`, `facebook` | `calcauto`, `aipro` | 21       |
+| `luxura`   | `luxura`                     | —                   | 9        |
+| `calcauto` | `calcauto`, `aipro`          | —                   | 1        |
 
-## Sous-commandes disponibles
+## Vars critiques surveillées
 
-| Commande            | Description                              |
-|---------------------|------------------------------------------|
-| `render-list`       | Liste les services Render                |
-| `diagnostic`        | Diagnostic complet (services + env vars) |
-| `protect`           | Snapshot des variables Render            |
-| `restart --service` | Redémarre un service                     |
+Le `snapshot` alerte si une de ces variables disparaît :
+
+- **Kenbot** : `KENBOT_FB_PAGE_ID`, `KENBOT_FB_PAGE_ACCESS_TOKEN`, `KENBOT_API_URL`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `BEAUCE_AGENT_TOKEN`, `TWILIO_ACCOUNT_SID`
+- **Luxura** : `LUXURA_API_URL`, `SUPABASE_URL`
+- **CalcAuto** : `GOOGLE_VISION_API_KEY`, `SUPABASE_URL`
+
+## Ajouter un 4ᵉ projet
+
+```python
+# devops/contexts/__init__.py
+NEWPROJ = BaseContext("newproj", keywords=["xyz"])
+ALL_PROJECTS["newproj"] = NEWPROJ
+```
+Aucune autre modification — le CLI, snapshot et diagnostic le reconnaissent automatiquement.
