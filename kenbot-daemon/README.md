@@ -1,134 +1,167 @@
-# 🛡️ Kenbot Daemon V2 — Local Mac Agent
+# 🛡️ Kenbot Daemon V3 — Local Mac Agent + AI Mode
 
-Comme un mini-Emergent qui tourne sur **ton Mac**, avec 3 boucles concurrentes :
+Un mini-Emergent qui tourne sur **ton Mac**, avec :
 
-| Loop          | Rôle                                                          |
-|---------------|---------------------------------------------------------------|
-| 📥 **queue**     | Exécute les JSON drop dans `commands/inbox/`                  |
-| 🛡️ **watchdog**  | Snapshot env vars + **auto-restore** si vars critiques perdues |
-| 🌐 **http**      | Webhook localhost:7777 (POST /cmd, GET /status)               |
+| Loop / Feature   | Rôle                                                              |
+|------------------|-------------------------------------------------------------------|
+| 📥 queue         | Exécute les JSON drop dans `commands/inbox/`                      |
+| 🛡️ watchdog      | Snapshot env vars + **auto-restore** si vars critiques perdues    |
+| 🌐 http          | Webhook localhost:7777 (`POST /cmd`, dashboard, status, health)   |
+| 🔥 **AI mode**   | "redémarre le runner" → daemon traduit via GPT → exécute          |
+| 📊 **Dashboard** | `http://localhost:7777/?t=TOKEN` — HTML live (status + outbox + logs) |
+| 🔔 **Push iPhone** | Notifications via ntfy.sh (gratuit, hors Wi-Fi)                  |
+| 🎯 **Templates** | `commands/templates/*.json` rejouables                            |
+| 📲 Apple Shortcut | Piloter depuis iPhone (voir section dédiée)                       |
 
 ## Installation
 
+### 1. Pré-requis (1 fois)
+
+```bash
+# AI mode requiert emergentintegrations
+pip3 install emergentintegrations --extra-index-url https://d33sy5i8bnduwe.cloudfront.net/simple/
+
+# Push iPhone : crée un topic ntfy obscur (ex: kenbot-daniel-xyz-7k2)
+# - Aucun compte requis
+# - Installe l'app "ntfy" sur ton iPhone (App Store)
+# - Dans l'app: + → Subscribe to topic → entre ton topic
+```
+
+### 2. Édite la config
+
 ```bash
 cd ~/Desktop/kenbot-dashboard
-# 1. Édite kenbot-daemon/com.dgauto.kenbot-daemon.plist
-#    → change KENBOT_DAEMON_TOKEN (un secret pour ton webhook)
-# 2. Installe :
-bash kenbot-daemon/install.sh
-# 3. Vérifie :
-tail -f kenbot-daemon/logs/daemon.log
+nano kenbot-daemon/com.dgauto.kenbot-daemon.plist
 ```
+
+À changer (3 lignes) :
+- `KENBOT_DAEMON_TOKEN` → token webhook (`openssl rand -hex 32`)
+- `EMERGENT_LLM_KEY`    → ta clé Emergent (récupérable dans le profil Emergent)
+- `KENBOT_NTFY_TOPIC`   → ton topic ntfy secret
+
+### 3. Installe
+
+```bash
+bash kenbot-daemon/install.sh
+```
+
+### 4. Teste
+
+```bash
+TOKEN="<ton token>"
+curl http://localhost:7777/health
+curl -H "X-Daemon-Token: $TOKEN" http://localhost:7777/status
+```
+
+Puis ouvre dans Safari : `http://localhost:7777/?t=<TON_TOKEN>` → **dashboard live**.
+
+## 🔥 AI Mode — langage naturel
+
+```bash
+curl -X POST http://localhost:7777/cmd \
+  -H "X-Daemon-Token: $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"action":"ai","prompt":"redémarre le news cron"}'
+# → AI traduit en {"action":"restart","service":"kenbot-news-publisher"} → exécute
+```
+
+Phrases qui marchent (testées) :
+- "redémarre kenbot-runner svp"
+- "fais une sauvegarde de tout"
+- "liste les env vars du runner"
+- "donne-moi la liste des env vars de calcauto"
+
+## 🎯 Templates
+
+```bash
+# Joue un template
+curl -X POST http://localhost:7777/cmd \
+  -H "X-Daemon-Token: $TOKEN" \
+  -d '{"action":"template","name":"morning-checkup"}'
+
+# Template avec variables {{var}}
+curl -X POST http://localhost:7777/cmd \
+  -H "X-Daemon-Token: $TOKEN" \
+  -d '{"action":"template","name":"env-set-generic","vars":{"service":"kenbot-runner","key":"MY_KEY","value":"123"}}'
+```
+
+Templates fournis :
+- `snapshot-all`         : snapshot des 3 projets
+- `morning-checkup`      : snapshot + env-list des 2 services critiques
+- `restart-news-cron`    : redémarre news-publisher + runner
+- `env-set-generic`      : set d'env var avec vars `{{service}}/{{key}}/{{value}}`
+
+Ajoute tes propres templates dans `commands/templates/*.json` — le daemon les détecte automatiquement.
+
+## 📲 Apple Shortcut (iPhone)
+
+Crée un Shortcut sur ton iPhone pour piloter le daemon à la voix ("Hey Siri, redémarre le runner") :
+
+1. App **Shortcuts** → **+** → Nouveau raccourci
+2. Ajoute action **"Obtenir contenu de l'URL"**
+   - URL : `http://<IP-MAC-LOCAL>:7777/cmd`
+   - Méthode : **POST**
+   - Headers :
+     - `X-Daemon-Token`: `<ton token>`
+     - `Content-Type`: `application/json`
+   - Corps de la requête (JSON) :
+     ```json
+     {"action":"ai","prompt":"Texte demandé"}
+     ```
+3. Ajoute action **"Demander une saisie"** → connecte le résultat dans le JSON via la variable `Texte demandé`
+4. Nomme : **"Kenbot"**
+5. Active : **"Avec Siri"** → ajoute la phrase déclencheur
+
+Maintenant tu peux dire à ton iPhone (sur le même Wi-Fi que le Mac) :
+> *"Dis Siri, lance Kenbot"*
+> *"Redémarre le runner"* → tâche exécutée en 3 secondes
+
+> ⚠️ Le Mac doit être joignable depuis l'iPhone (même Wi-Fi, ou via **Tailscale** pour accès distant)
+
+## 🔔 Push notification ntfy
+
+Les événements suivants déclenchent une push iPhone :
+- ✅ Commande exécutée OK
+- ❌ Commande échouée
+- ⚠️ Watchdog : auto-restore d'une env var critique
+
+Configuration : `KENBOT_NTFY_TOPIC=ton-topic-secret` dans le plist. Si vide → désactivé silencieusement.
+
+## 📊 Dashboard live
+
+`http://localhost:7777/?t=<TOKEN>`
+
+Auto-refresh 10s. Affiche :
+- Heartbeat (âge en secondes)
+- Inbox pending / Processing / Outbox total
+- Status watchdog + AI
+- 10 derniers résultats
+- 50 dernières lignes de log
+
+## Actions supportées (résumé)
+
+| Action       | Payload                                                             |
+|--------------|---------------------------------------------------------------------|
+| `ai`         | `{action, prompt: "phrase en français"}`                            |
+| `template`   | `{action, name: "snapshot-all", vars: {…}}`                         |
+| `restart`    | `{action, service}`                                                 |
+| `env-set`    | `{action, service, key, value}`                                     |
+| `env-list`   | `{action, service}`                                                 |
+| `snapshot`   | `{action, project: "kenbot\|luxura\|calcauto\|all"}`                |
+| `kenbotctl`  | `{action, args: [...]}` (passe-plat brut)                           |
+| `shell`      | `{action, cmd}` — **DÉSACTIVÉ par défaut** (`KENBOT_ALLOW_SHELL=1`) |
+
+## Sécurité
+
+- HTTP listen `127.0.0.1` uniquement
+- Token `X-Daemon-Token` requis pour `/cmd`, `/status`, `/` (dashboard)
+- `subprocess.run` avec **args list** (pas de shell injection)
+- Action `shell` désactivée par défaut
+- AI mode peut être désactivé via `KENBOT_AI_ENABLED=0`
+- Token URL accepté : `/?t=TOKEN` (utile pour Shortcut, mais évite de le partager)
 
 ## Désinstaller
 
 ```bash
 bash kenbot-daemon/uninstall.sh
 ```
-
-## Utilisation #1 — Par fichier JSON (le plus simple)
-
-```bash
-# Restart un service
-cat > kenbot-daemon/commands/inbox/restart-runner.json <<EOF
-{"action": "restart", "service": "kenbot-runner"}
-EOF
-
-# Attends 10s puis lis le résultat :
-cat kenbot-daemon/commands/outbox/result_restart-runner.json
-```
-
-## Utilisation #2 — Par webhook HTTP (depuis iPhone Shortcuts, Siri, curl…)
-
-```bash
-TOKEN="<celui du plist>"
-
-# Redémarrer
-curl -X POST http://localhost:7777/cmd \
-  -H "X-Daemon-Token: $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"action":"restart","service":"kenbot-runner"}'
-
-# Set env var
-curl -X POST http://localhost:7777/cmd \
-  -H "X-Daemon-Token: $TOKEN" \
-  -d '{"action":"env-set","service":"kenbot-runner","key":"MY_KEY","value":"123"}'
-
-# Snapshot
-curl -X POST http://localhost:7777/cmd \
-  -H "X-Daemon-Token: $TOKEN" \
-  -d '{"action":"snapshot","project":"all"}'
-
-# Status du daemon
-curl -H "X-Daemon-Token: $TOKEN" http://localhost:7777/status
-
-# Healthcheck (pas d'auth)
-curl http://localhost:7777/health
-```
-
-## Actions supportées
-
-| Action       | Payload                                                        |
-|--------------|----------------------------------------------------------------|
-| `restart`    | `{action, service}`                                            |
-| `env-set`    | `{action, service, key, value}`                                |
-| `env-list`   | `{action, service}`                                            |
-| `snapshot`   | `{action, project: "kenbot\|luxura\|calcauto\|all"}`           |
-| `kenbotctl`  | `{action, args: ["env-set","--service","X",...]}` (passe-plat) |
-| `shell`      | `{action, cmd: "..."}` — **DÉSACTIVÉ par défaut**              |
-
-## Configuration (variables d'environnement)
-
-| Variable                     | Défaut       | Rôle                                       |
-|------------------------------|--------------|--------------------------------------------|
-| `KENBOT_REPO_DIR`            | `~/Desktop/kenbot-dashboard` | Racine du repo (où vit `devops/`)    |
-| `KENBOT_DAEMON_DIR`          | `<repo>/kenbot-daemon`       | Dossier de travail du daemon         |
-| `KENBOT_QUEUE_POLL`          | `10`         | Secondes entre 2 polls inbox               |
-| `KENBOT_WATCHDOG_INTERVAL`   | `1800`       | Secondes entre 2 snapshots watchdog        |
-| `KENBOT_WATCHDOG_PROJECTS`   | `kenbot,luxura,calcauto` | Projets surveillés           |
-| `KENBOT_WATCHDOG_ENABLED`    | `1`          | `0` pour désactiver le watchdog            |
-| `KENBOT_HTTP_PORT`           | `7777`       | Port webhook                               |
-| `KENBOT_HTTP_ENABLED`        | `1`          | `0` pour désactiver le webhook             |
-| `KENBOT_DAEMON_TOKEN`        | *(vide)*     | **Secret X-Daemon-Token** — vide = refuse tout |
-| `KENBOT_ALLOW_SHELL`         | `0`          | `1` pour autoriser action `shell` (dangereux) |
-| `KENBOT_NOTIFY_MACOS`        | `1`          | Notifications natives macOS                |
-
-## Sécurité
-
-- Webhook écoute uniquement sur `127.0.0.1` (jamais exposé au réseau)
-- Token X-Daemon-Token requis pour `/cmd` et `/status`
-- Si le token est vide, le webhook **refuse toutes** les requêtes (par sécurité)
-- `subprocess.run` avec **args list** (pas de shell injection)
-- Action `shell` désactivée par défaut
-
-## Que fait le watchdog ?
-
-Toutes les 30 min (configurable) :
-1. Lance `snapshot --project all` (3 projets)
-2. Compare avec le snapshot précédent
-3. Pour chaque service : si une **var critique** (cf. `CRITICAL_VARS` dans `protect_render_envvars.py`) était présente avant et a disparu → **restauration automatique** depuis l'ancien snapshot
-4. Notification macOS + log si auto-restore déclenché
-
-→ **Plus jamais de perte silencieuse d'env vars** (le problème récurrent #4 de tes handoffs).
-
-## Combo iPhone Shortcut
-
-Tu peux créer un Apple Shortcut "Restart Kenbot" qui fait :
-```
-URL: http://<ip-mac-local>:7777/cmd
-Method: POST
-Headers: X-Daemon-Token: <ton-token>
-Body: {"action":"restart","service":"kenbot-runner"}
-```
-*(Le Mac doit être sur le même réseau Wi-Fi, ou via Tailscale/ZeroTier pour accès distant.)*
-
-## Logs
-
-- `kenbot-daemon/logs/daemon.log` — log principal (rotation 2 MB × 5)
-- `kenbot-daemon/logs/launchd.out.log` — stdout brut launchd
-- `kenbot-daemon/logs/launchd.err.log` — stderr brut launchd
-
-## Heartbeat
-
-Le fichier `kenbot-daemon/heartbeat.txt` est mis à jour toutes les 30s.
-Si la dernière ligne date de >2 min → le daemon est mort.

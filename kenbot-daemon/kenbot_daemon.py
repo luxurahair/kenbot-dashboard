@@ -1,29 +1,23 @@
 #!/usr/bin/env python3
 """
-Kenbot Daemon V2 — Mini Emergent Local Agent
-=============================================
-3 boucles concurrentes :
-  1. queue_loop       → exécute les commandes JSON drop dans commands/inbox/
+Kenbot Daemon V3 — Local Mac Agent + AI Mode + Dashboard + Templates + Push
+==============================================================================
+V3 ajoute (en plus de V2) :
+  🔥 ai            : "redémarre le runner" → daemon traduit via Claude → exécute
+  📊 GET /         : Dashboard HTML live (status, queue, logs)
+  🔔 push notif    : Ntfy.sh (gratuit, pas de compte) + macOS native
+  🎯 templates     : commands/templates/*.json rejouables via {"action":"template", "name":"X"}
+  📲 Apple Shortcut: voir kenbot-daemon/README.md (section Shortcut iPhone)
+
+Boucles concurrentes (inchangées vs V2) :
+  1. queue_loop       → exécute les JSON drop dans commands/inbox/
   2. watchdog_loop    → snapshot toutes les N min + auto-restore vars critiques perdues
-  3. http_server      → webhook localhost:7777 (POST /cmd, GET /status, GET /health)
-
-Toutes les commandes acceptent les actions suivantes (champ "action") :
-  - "kenbotctl"  : args=["env-set", "--service", "...", ...]   (passe-plat)
-  - "restart"    : service="kenbot-runner"
-  - "env-set"    : service, key, value
-  - "env-list"   : service
-  - "snapshot"   : project (kenbot|luxura|calcauto|all)
-  - "shell"      : cmd="ls -la"   (UNIQUEMENT si ALLOW_SHELL=1 dans env)
-
-Sécurité :
-  - subprocess avec args list (pas de shell injection)
-  - secret partagé X-Daemon-Token pour le webhook HTTP
-  - listen sur 127.0.0.1 uniquement
+  3. http_server      → webhook localhost:7777 (POST /cmd, GET /status, GET /, GET /health)
 """
 import json
 import logging
 import os
-import shutil
+import re
 import signal
 import subprocess
 import sys
@@ -41,20 +35,29 @@ REPO_DIR = Path(os.environ.get("KENBOT_REPO_DIR", "~/Desktop/kenbot-dashboard"))
 INBOX = DAEMON_DIR / "commands/inbox"
 PROCESSING = DAEMON_DIR / "commands/processing"
 OUTBOX = DAEMON_DIR / "commands/outbox"
+TEMPLATES = DAEMON_DIR / "commands/templates"
 LOG_DIR = DAEMON_DIR / "logs"
 HEARTBEAT = DAEMON_DIR / "heartbeat.txt"
 
 QUEUE_POLL_SECONDS = int(os.environ.get("KENBOT_QUEUE_POLL", "10"))
-WATCHDOG_INTERVAL_SECONDS = int(os.environ.get("KENBOT_WATCHDOG_INTERVAL", "1800"))  # 30 min
+WATCHDOG_INTERVAL_SECONDS = int(os.environ.get("KENBOT_WATCHDOG_INTERVAL", "1800"))
 WATCHDOG_PROJECTS = os.environ.get("KENBOT_WATCHDOG_PROJECTS", "kenbot,luxura,calcauto").split(",")
 WATCHDOG_ENABLED = os.environ.get("KENBOT_WATCHDOG_ENABLED", "1") == "1"
 HTTP_PORT = int(os.environ.get("KENBOT_HTTP_PORT", "7777"))
 HTTP_ENABLED = os.environ.get("KENBOT_HTTP_ENABLED", "1") == "1"
-HTTP_TOKEN = os.environ.get("KENBOT_DAEMON_TOKEN", "")  # vide → webhook rejette tout
+HTTP_TOKEN = os.environ.get("KENBOT_DAEMON_TOKEN", "")
 ALLOW_SHELL = os.environ.get("KENBOT_ALLOW_SHELL", "0") == "1"
 NOTIFY_MACOS = os.environ.get("KENBOT_NOTIFY_MACOS", "1") == "1"
 
-for d in (INBOX, PROCESSING, OUTBOX, LOG_DIR):
+# V3 ajouts
+NTFY_TOPIC = os.environ.get("KENBOT_NTFY_TOPIC", "")  # ex: kenbot-daniel-xyz123 (secret obscur)
+NTFY_SERVER = os.environ.get("KENBOT_NTFY_SERVER", "https://ntfy.sh")
+AI_ENABLED = os.environ.get("KENBOT_AI_ENABLED", "1") == "1"
+AI_PROVIDER = os.environ.get("KENBOT_AI_PROVIDER", "openai")  # anthropic|openai|gemini
+AI_MODEL = os.environ.get("KENBOT_AI_MODEL", "gpt-5.4-mini")
+EMERGENT_LLM_KEY = os.environ.get("EMERGENT_LLM_KEY", "")
+
+for d in (INBOX, PROCESSING, OUTBOX, TEMPLATES, LOG_DIR):
     d.mkdir(parents=True, exist_ok=True)
 
 # ─── Logging ──────────────────────────────────────────────────
@@ -65,17 +68,36 @@ _handler.setFormatter(logging.Formatter("[%(asctime)s] %(levelname)s %(threadNam
 log.addHandler(_handler)
 log.addHandler(logging.StreamHandler(sys.stdout))
 
-# ─── Utils ────────────────────────────────────────────────────
+# ─── Notifications (macOS + Ntfy push iPhone) ─────────────────
 def notify_mac(title, message):
-    if not NOTIFY_MACOS:
+    if NOTIFY_MACOS:
+        try:
+            subprocess.run(
+                ["osascript", "-e", f'display notification "{message}" with title "{title}"'],
+                check=False, timeout=5,
+            )
+        except Exception:
+            pass
+    notify_ntfy(title, message)
+
+
+def notify_ntfy(title, message, priority="default", tags=None):
+    """Push notification via ntfy.sh (gratuit, iPhone hors Wi-Fi)."""
+    if not NTFY_TOPIC:
         return
     try:
-        subprocess.run(
-            ["osascript", "-e", f'display notification "{message}" with title "{title}"'],
-            check=False, timeout=5,
-        )
-    except Exception:
-        pass
+        import urllib.request
+        url = f"{NTFY_SERVER.rstrip('/')}/{NTFY_TOPIC}"
+        headers = {
+            "Title": title.encode("utf-8"),
+            "Priority": priority,
+        }
+        if tags:
+            headers["Tags"] = ",".join(tags)
+        req = urllib.request.Request(url, data=message.encode("utf-8"), headers=headers, method="POST")
+        urllib.request.urlopen(req, timeout=5).read()
+    except Exception as e:
+        log.warning(f"ntfy push échec: {e}")
 
 
 def write_heartbeat():
@@ -83,13 +105,81 @@ def write_heartbeat():
 
 
 def run_kenbotctl(args, timeout=120):
-    """Exécute python3 devops/kenbotctl.py <args> dans le repo, retourne (rc, stdout, stderr)."""
     cmd = ["python3", "devops/kenbotctl.py"] + list(args)
-    proc = subprocess.run(
-        cmd, cwd=str(REPO_DIR),
-        capture_output=True, text=True, timeout=timeout,
-    )
+    proc = subprocess.run(cmd, cwd=str(REPO_DIR), capture_output=True, text=True, timeout=timeout)
     return proc.returncode, proc.stdout, proc.stderr
+
+
+# ─── AI Mode (langage naturel → JSON command) ─────────────────
+AI_SYSTEM_PROMPT = """Tu es un assistant DevOps qui traduit des requêtes en français (langage naturel)
+en une commande JSON unique exécutable par le daemon Kenbot.
+
+ACTIONS DISPONIBLES :
+  - {"action":"restart","service":"NOM"}           # redémarre un service Render
+  - {"action":"env-set","service":"NOM","key":"K","value":"V"}  # set/update env var
+  - {"action":"env-list","service":"NOM"}          # liste env vars
+  - {"action":"snapshot","project":"kenbot|luxura|calcauto|all"}
+  - {"action":"kenbotctl","args":["sous-cmd","--flag","val"]}   # passe-plat générique
+
+SERVICES TYPIQUES :
+  kenbot-dashboard-api, kenbot-runner, kenbot-news-publisher, kenbot-beauce-runner,
+  calcauto-aipro, luxura-multi-tape, luxura-multi-itip
+
+RÈGLES :
+  - Réponds UNIQUEMENT avec un objet JSON valide, sans markdown, sans texte autour.
+  - Si la requête est ambiguë ou impossible, réponds {"action":"error","message":"raison claire"}.
+  - Devine intelligemment le service exact (ex: "le runner" → "kenbot-runner",
+    "le news cron" → "kenbot-news-publisher", "calcauto" → "calcauto-aipro").
+  - Si l'utilisateur dit "tous les snapshots" ou "tout sauvegarder" → snapshot avec project=all.
+"""
+
+
+def ai_translate(prompt):
+    """Appelle Claude via emergentintegrations pour transformer une phrase FR en command JSON."""
+    if not EMERGENT_LLM_KEY:
+        return {"action": "error", "message": "EMERGENT_LLM_KEY manquante dans l'environnement"}
+    try:
+        import asyncio
+        from emergentintegrations.llm.chat import LlmChat, UserMessage
+
+        async def _run():
+            chat = LlmChat(
+                api_key=EMERGENT_LLM_KEY,
+                session_id=f"kenbot-daemon-{uuid.uuid4().hex[:8]}",
+                system_message=AI_SYSTEM_PROMPT,
+            ).with_model(AI_PROVIDER, AI_MODEL)
+            return await chat.send_message(UserMessage(text=prompt))
+
+        text = asyncio.run(_run())
+        # Extrait du JSON même si l'IA met du texte autour (robustesse)
+        m = re.search(r"\{.*\}", text, re.DOTALL)
+        if not m:
+            return {"action": "error", "message": f"Pas de JSON dans la réponse IA: {text[:200]}"}
+        return json.loads(m.group(0))
+    except ImportError:
+        return {"action": "error", "message": "emergentintegrations non installé : pip install emergentintegrations --extra-index-url https://d33sy5i8bnduwe.cloudfront.net/simple/"}
+    except Exception as e:
+        log.exception("ai_translate failed")
+        return {"action": "error", "message": f"AI échec: {e}"}
+
+
+# ─── Templates ────────────────────────────────────────────────
+def load_template(name, overrides=None):
+    """Charge un template JSON et applique des overrides. Supporte {{var}} substitution."""
+    path = TEMPLATES / f"{name}.json"
+    if not path.exists():
+        # Liste les disponibles
+        available = sorted(p.stem for p in TEMPLATES.glob("*.json"))
+        return {"action": "error", "message": f"Template '{name}' introuvable. Disponibles: {', '.join(available) or '(aucun)'}"}
+    raw = path.read_text(encoding="utf-8")
+    # Substitution {{var}} depuis overrides
+    if overrides:
+        for k, v in overrides.items():
+            raw = raw.replace(f"{{{{{k}}}}}", str(v))
+    try:
+        return json.loads(raw)
+    except Exception as e:
+        return {"action": "error", "message": f"Template JSON invalide: {e}"}
 
 
 # ─── Executor ─────────────────────────────────────────────────
@@ -99,6 +189,43 @@ def execute_command(cmd):
     log.info(f"Action={action} payload={ {k:v for k,v in cmd.items() if k != 'value'} }")
 
     try:
+        # V3 : AI mode
+        if action == "ai":
+            prompt = cmd.get("prompt") or cmd.get("text")
+            if not prompt:
+                return {"ok": False, "error": "'prompt' requis"}
+            if not AI_ENABLED:
+                return {"ok": False, "error": "AI désactivé (KENBOT_AI_ENABLED=0)"}
+            translated = ai_translate(prompt)
+            log.info(f"AI translated '{prompt}' → {translated}")
+            if translated.get("action") == "error":
+                return {"ok": False, "error": translated.get("message"), "ai_translated": translated}
+            # Exécute la commande traduite récursivement
+            result = execute_command(translated)
+            result["ai_translated"] = translated
+            return result
+
+        # V3 : Template mode
+        if action == "template":
+            name = cmd.get("name")
+            if not name:
+                return {"ok": False, "error": "'name' requis"}
+            overrides = cmd.get("vars") or {}
+            loaded = load_template(name, overrides)
+            if loaded.get("action") == "error":
+                return {"ok": False, "error": loaded.get("message")}
+            # Si le template contient une liste d'étapes
+            if isinstance(loaded, list) or (isinstance(loaded, dict) and "steps" in loaded):
+                steps = loaded if isinstance(loaded, list) else loaded["steps"]
+                results = []
+                for i, step in enumerate(steps):
+                    r = execute_command(step)
+                    results.append({"step": i, "cmd": step, "result": r})
+                    if not r.get("ok"):
+                        return {"ok": False, "error": f"Step {i} failed", "results": results}
+                return {"ok": True, "results": results}
+            return execute_command(loaded)
+
         if action == "kenbotctl":
             args = cmd.get("args") or []
             if not isinstance(args, list):
@@ -150,20 +277,19 @@ def execute_command(cmd):
         return {"ok": False, "error": str(e)}
 
 
-# ─── Queue loop (inbox/processing/outbox) ─────────────────────
+# ─── Queue loop ───────────────────────────────────────────────
 def process_one_file(filepath):
-    """Move filepath → processing → execute → write outbox → delete processing."""
     name = filepath.name
     processing_path = PROCESSING / name
     try:
         filepath.rename(processing_path)
     except OSError as e:
-        log.warning(f"Race condition (déjà déplacé) sur {name}: {e}")
+        log.warning(f"Race condition sur {name}: {e}")
         return
 
     correlation_id = str(uuid.uuid4())[:8]
     try:
-        cmd = json.loads(processing_path.read_text())
+        cmd = json.loads(processing_path.read_text(encoding="utf-8"))
     except Exception as e:
         result = {"ok": False, "error": f"JSON invalide: {e}", "correlation_id": correlation_id}
     else:
@@ -173,17 +299,19 @@ def process_one_file(filepath):
         result["processed_at"] = datetime.now(timezone.utc).isoformat()
 
     out_path = OUTBOX / f"result_{name}"
-    out_path.write_text(json.dumps(result, indent=2, ensure_ascii=False))
+    out_path.write_text(json.dumps(result, indent=2, ensure_ascii=False), encoding="utf-8")
     processing_path.unlink(missing_ok=True)
 
     status = "✅" if result.get("ok") else "❌"
     log.info(f"[{correlation_id}] {status} {name} → {out_path.name}")
     if not result.get("ok"):
         notify_mac("Kenbot Daemon ❌", f"{name}: {result.get('error', 'failed')[:80]}")
+    else:
+        notify_ntfy("Kenbot Daemon ✅", f"{name} OK", tags=["white_check_mark"])
 
 
 def queue_loop(stop_event):
-    log.info(f"📥 queue_loop démarré (poll={QUEUE_POLL_SECONDS}s, inbox={INBOX})")
+    log.info(f"📥 queue_loop démarré (poll={QUEUE_POLL_SECONDS}s)")
     while not stop_event.is_set():
         try:
             for f in sorted(INBOX.glob("*.json")):
@@ -197,29 +325,26 @@ def queue_loop(stop_event):
     log.info("📥 queue_loop arrêté")
 
 
-# ─── Watchdog loop (snapshot + auto-restore) ──────────────────
+# ─── Watchdog ─────────────────────────────────────────────────
 def _load_last_snapshot(project):
-    """Retourne le snapshot le plus récent pour un projet (dict) ou None."""
     snap_dir = REPO_DIR / "memory" / "render_snapshots"
     files = sorted(snap_dir.glob(f"{project}_snapshot_*.json"))
     if not files:
         return None
     try:
-        return json.loads(files[-1].read_text())
+        return json.loads(files[-1].read_text(encoding="utf-8"))
     except Exception:
         return None
 
 
 def _watchdog_tick():
-    """1 tick : snapshot chaque projet + auto-restore si vars critiques manquent depuis le dernier snapshot."""
-    from sys import path as syspath
-    syspath.insert(0, str(REPO_DIR / "devops"))
+    sys.path.insert(0, str(REPO_DIR / "devops"))
     try:
         from contexts import get_context  # type: ignore
         from protect_render_envvars import CRITICAL_VARS, RenderEnvProtector  # type: ignore
         from render_client import RenderClient  # type: ignore
     except Exception:
-        log.exception("Imports devops impossibles — vérifie KENBOT_REPO_DIR")
+        log.exception("Imports devops impossibles")
         return
 
     client = RenderClient()
@@ -227,7 +352,6 @@ def _watchdog_tick():
         project = project.strip()
         if not project:
             continue
-        # 1. Snapshot frais
         try:
             previous = _load_last_snapshot(project)
             RenderEnvProtector(project).snapshot()
@@ -236,10 +360,8 @@ def _watchdog_tick():
             continue
 
         if not previous:
-            log.info(f"watchdog {project} : pas d'historique, rien à comparer")
             continue
 
-        # 2. Auto-restore : pour chaque service, comparer aux vars critiques
         critical = CRITICAL_VARS.get(project, set())
         if not critical:
             continue
@@ -254,30 +376,21 @@ def _watchdog_tick():
             now_vars = client.get_env_vars(sid)
             prev_data = previous.get("services", {}).get(name, {})
             prev_vars = prev_data.get("env_vars", {})
-
-            # Vars critiques que l'on avait AVANT et qu'on n'a PLUS maintenant → restore
-            disparues = {
-                k for k in critical
-                if k in prev_vars and k not in now_vars
-            }
+            disparues = {k for k in critical if k in prev_vars and k not in now_vars}
             if not disparues:
                 continue
             log.warning(f"⚠️  {project}/{name} a perdu : {', '.join(sorted(disparues))} — auto-restore")
-            notify_mac(
-                "Kenbot Watchdog ⚠️",
-                f"{name} a perdu {len(disparues)} var(s) critique(s) — restauration auto",
-            )
+            notify_mac("Kenbot Watchdog ⚠️", f"{name}: restore {len(disparues)} var(s)")
             for key in disparues:
-                value = prev_vars[key]
                 try:
-                    ok = client.set_env_var(sid, key, value)
+                    ok = client.set_env_var(sid, key, prev_vars[key])
                     log.info(f"   restore {key} → {'OK' if ok else 'FAIL'}")
                 except Exception:
                     log.exception(f"restore {key} échec")
 
 
 def watchdog_loop(stop_event):
-    log.info(f"🛡️  watchdog_loop démarré (interval={WATCHDOG_INTERVAL_SECONDS}s, projects={WATCHDOG_PROJECTS})")
+    log.info(f"🛡️  watchdog_loop démarré (interval={WATCHDOG_INTERVAL_SECONDS}s)")
     while not stop_event.is_set():
         try:
             _watchdog_tick()
@@ -288,7 +401,92 @@ def watchdog_loop(stop_event):
     log.info("🛡️  watchdog_loop arrêté")
 
 
-# ─── HTTP webhook (localhost:7777) ────────────────────────────
+# ─── HTTP webhook + Dashboard ─────────────────────────────────
+DASHBOARD_HTML = """<!DOCTYPE html>
+<html lang="fr"><head><meta charset="UTF-8"><title>Kenbot Daemon</title>
+<meta http-equiv="refresh" content="10">
+<style>
+  body{margin:0;background:#0b0f0c;color:#e6f0ea;font-family:-apple-system,BlinkMacSystemFont,Roboto,sans-serif;}
+  .wrap{max-width:980px;margin:0 auto;padding:24px 18px;}
+  h1{margin:0 0 18px;color:#22c55e;font-weight:800;letter-spacing:-0.01em;font-size:28px;}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px;margin-bottom:22px;}
+  .card{border:1px solid rgba(34,197,94,0.25);background:rgba(34,197,94,0.05);border-radius:10px;padding:14px 16px;}
+  .card .label{font-size:11px;color:#22c55e;text-transform:uppercase;letter-spacing:0.08em;font-weight:800;margin-bottom:6px;}
+  .card .val{font-size:24px;font-weight:800;color:#fff;}
+  .card.warn{border-color:#ef4444;background:rgba(239,68,68,0.06);}
+  .card.warn .label{color:#ef4444;}
+  pre{background:#000;border:1px solid #222;border-radius:8px;padding:12px;overflow:auto;max-height:300px;font-size:12px;color:#9ca3af;}
+  .row{display:flex;justify-content:space-between;border-bottom:1px solid rgba(34,197,94,0.12);padding:8px 0;}
+  .ok{color:#22c55e;}.ko{color:#ef4444;}
+  small{color:#666;}
+  h2{color:#22c55e;font-size:16px;margin-top:24px;border-bottom:1px solid rgba(34,197,94,0.2);padding-bottom:6px;}
+</style></head><body><div class="wrap">
+<h1>🛡️ Kenbot Daemon — Dashboard</h1>
+<div class="grid">__CARDS__</div>
+<h2>📥 Dernières commandes (outbox)</h2>
+__OUTBOX__
+<h2>📜 Log (50 dernières lignes)</h2>
+<pre>__LOG__</pre>
+<small>Auto-refresh toutes les 10s · <a href="/health" style="color:#22c55e;">/health</a></small>
+</div></body></html>"""
+
+
+def render_dashboard():
+    # Status cards
+    hb_age = "—"
+    if HEARTBEAT.exists():
+        try:
+            hb_dt = datetime.fromisoformat(HEARTBEAT.read_text().strip())
+            age_s = (datetime.now(timezone.utc) - hb_dt).total_seconds()
+            hb_age = f"{int(age_s)}s"
+        except Exception:
+            pass
+
+    pending = len(list(INBOX.glob("*.json")))
+    processing = len(list(PROCESSING.glob("*.json")))
+    done = len(list(OUTBOX.glob("*.json")))
+    cards = [
+        ("Heartbeat", hb_age, ""),
+        ("Inbox", str(pending), "warn" if pending > 5 else ""),
+        ("Processing", str(processing), "warn" if processing > 0 else ""),
+        ("Outbox total", str(done), ""),
+        ("Watchdog", "ON" if WATCHDOG_ENABLED else "OFF", "" if WATCHDOG_ENABLED else "warn"),
+        ("AI mode", "ON" if (AI_ENABLED and EMERGENT_LLM_KEY) else "OFF", ""),
+    ]
+    cards_html = "".join(
+        f'<div class="card {cls}"><div class="label">{lbl}</div><div class="val">{val}</div></div>'
+        for lbl, val, cls in cards
+    )
+
+    # Outbox récent (10 derniers)
+    outs = sorted(OUTBOX.glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True)[:10]
+    out_rows = []
+    for f in outs:
+        try:
+            d = json.loads(f.read_text(encoding="utf-8"))
+            ok = d.get("ok", False)
+            badge = '<span class="ok">✅</span>' if ok else '<span class="ko">❌</span>'
+            name = f.name.replace("result_", "")
+            ts = d.get("processed_at", "")[:19].replace("T", " ")
+            out_rows.append(f'<div class="row"><span>{badge} {name}</span><span>{ts}</span></div>')
+        except Exception:
+            continue
+    out_html = "".join(out_rows) or '<div class="row"><span>(aucun résultat)</span></div>'
+
+    # Log tail
+    log_path = LOG_DIR / "daemon.log"
+    log_tail = ""
+    if log_path.exists():
+        try:
+            with open(log_path, "r", encoding="utf-8") as f:
+                lines = f.readlines()[-50:]
+                log_tail = "".join(lines).replace("<", "&lt;").replace(">", "&gt;")
+        except Exception:
+            log_tail = "(log unavailable)"
+
+    return DASHBOARD_HTML.replace("__CARDS__", cards_html).replace("__OUTBOX__", out_html).replace("__LOG__", log_tail)
+
+
 class WebhookHandler(BaseHTTPRequestHandler):
     def _send_json(self, status, payload):
         body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
@@ -298,19 +496,39 @@ class WebhookHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
-    def log_message(self, fmt, *args):  # silence default stderr
+    def _send_html(self, status, html):
+        body = html.encode("utf-8")
+        self.send_response(status)
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def log_message(self, fmt, *args):
         log.info("HTTP " + (fmt % args))
 
     def _auth_ok(self):
-        if not HTTP_TOKEN:  # daemon refuse tout si token vide
+        if not HTTP_TOKEN:
             return False
-        return self.headers.get("X-Daemon-Token") == HTTP_TOKEN
+        # Token via header OU query param ?t=... (utile pour Apple Shortcut simple)
+        if self.headers.get("X-Daemon-Token") == HTTP_TOKEN:
+            return True
+        if f"t={HTTP_TOKEN}" in (self.path or ""):
+            return True
+        return False
 
     def do_GET(self):
+        # Dashboard HTML — auth via query param ?t=TOKEN
+        if self.path.startswith("/") and (self.path == "/" or self.path.startswith("/?")):
+            if not self._auth_ok():
+                self._send_html(401, "<h1>401 — Ajoute ?t=TOKEN à l'URL</h1>")
+                return
+            self._send_html(200, render_dashboard())
+            return
         if self.path in ("/health", "/healthz"):
             self._send_json(200, {"ok": True, "ts": datetime.now(timezone.utc).isoformat()})
             return
-        if self.path == "/status":
+        if self.path.startswith("/status"):
             if not self._auth_ok():
                 self._send_json(401, {"ok": False, "error": "unauthorized"})
                 return
@@ -320,12 +538,14 @@ class WebhookHandler(BaseHTTPRequestHandler):
                 "inbox_pending": len(list(INBOX.glob("*.json"))),
                 "outbox_results": len(list(OUTBOX.glob("*.json"))),
                 "watchdog_enabled": WATCHDOG_ENABLED,
+                "ai_enabled": AI_ENABLED and bool(EMERGENT_LLM_KEY),
+                "templates": sorted(p.stem for p in TEMPLATES.glob("*.json")),
             })
             return
         self._send_json(404, {"ok": False, "error": "not found"})
 
     def do_POST(self):
-        if self.path != "/cmd":
+        if self.path != "/cmd" and not self.path.startswith("/cmd?"):
             self._send_json(404, {"ok": False, "error": "not found"})
             return
         if not self._auth_ok():
@@ -343,23 +563,20 @@ class WebhookHandler(BaseHTTPRequestHandler):
 
 def http_loop(stop_event):
     if not HTTP_ENABLED:
-        log.info("🌐 http server désactivé")
         return
     if not HTTP_TOKEN:
-        log.warning("🌐 KENBOT_DAEMON_TOKEN vide → http server démarre mais refuse toutes les requêtes")
+        log.warning("🌐 KENBOT_DAEMON_TOKEN vide → refuse toutes les requêtes")
     server = ThreadingHTTPServer(("127.0.0.1", HTTP_PORT), WebhookHandler)
-    log.info(f"🌐 http server localhost:{HTTP_PORT} (POST /cmd, GET /status, GET /health)")
+    log.info(f"🌐 http server localhost:{HTTP_PORT} — / (dashboard), POST /cmd, GET /status, GET /health")
 
-    def _shutdown_watcher():
+    def _shutdown():
         stop_event.wait()
         server.shutdown()
-
-    threading.Thread(target=_shutdown_watcher, daemon=True, name="http-shutdown").start()
+    threading.Thread(target=_shutdown, daemon=True, name="http-shutdown").start()
     try:
         server.serve_forever()
     finally:
         server.server_close()
-        log.info("🌐 http server arrêté")
 
 
 # ─── Main ────────────────────────────────────────────────────
@@ -373,15 +590,15 @@ def main():
     signal.signal(signal.SIGTERM, _sig)
     signal.signal(signal.SIGINT, _sig)
 
-    log.info("🚀 Kenbot Daemon V2 démarré")
+    log.info("🚀 Kenbot Daemon V3 démarré")
     log.info(f"   DAEMON_DIR={DAEMON_DIR}")
     log.info(f"   REPO_DIR={REPO_DIR}")
+    log.info(f"   AI={'ON' if (AI_ENABLED and EMERGENT_LLM_KEY) else 'OFF'} ({AI_PROVIDER}/{AI_MODEL})")
+    log.info(f"   NTFY topic={'set' if NTFY_TOPIC else '(empty)'}")
     write_heartbeat()
-    notify_mac("Kenbot Daemon", "🚀 Démarré")
+    notify_mac("Kenbot Daemon", "🚀 V3 démarré")
 
-    threads = [
-        threading.Thread(target=queue_loop, args=(stop_event,), daemon=True, name="queue"),
-    ]
+    threads = [threading.Thread(target=queue_loop, args=(stop_event,), daemon=True, name="queue")]
     if WATCHDOG_ENABLED:
         threads.append(threading.Thread(target=watchdog_loop, args=(stop_event,), daemon=True, name="watchdog"))
     if HTTP_ENABLED:
@@ -390,7 +607,6 @@ def main():
     for t in threads:
         t.start()
 
-    # main thread = heartbeat tick toutes les 30s + monitor des threads
     try:
         while not stop_event.is_set():
             write_heartbeat()

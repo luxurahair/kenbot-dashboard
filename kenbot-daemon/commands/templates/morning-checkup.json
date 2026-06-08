@@ -1,0 +1,7 @@
+{
+  "steps": [
+    {"action": "snapshot", "project": "all"},
+    {"action": "env-list", "service": "kenbot-dashboard-api"},
+    {"action": "env-list", "service": "kenbot-news-publisher"}
+  ]
+}

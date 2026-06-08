@@ -1,0 +1,6 @@
+{
+  "action": "env-set",
+  "service": "{{service}}",
+  "key": "{{key}}",
+  "value": "{{value}}"
+}

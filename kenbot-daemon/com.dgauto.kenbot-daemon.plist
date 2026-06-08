@@ -25,6 +25,18 @@
         <string>1</string>
         <key>KENBOT_ALLOW_SHELL</key>
         <string>0</string>
+        <key>KENBOT_AI_ENABLED</key>
+        <string>1</string>
+        <key>KENBOT_AI_PROVIDER</key>
+        <string>openai</string>
+        <key>KENBOT_AI_MODEL</key>
+        <string>gpt-5.4-mini</string>
+        <key>EMERGENT_LLM_KEY</key>
+        <string>CHANGE_ME_emergent_llm_key</string>
+        <key>KENBOT_NTFY_TOPIC</key>
+        <string>CHANGE_ME_ntfy_topic_secret</string>
+        <key>KENBOT_NTFY_SERVER</key>
+        <string>https://ntfy.sh</string>
     </dict>
     <key>WorkingDirectory</key>
     <string>/Users/danielgiroux/Desktop/kenbot-dashboard</string>

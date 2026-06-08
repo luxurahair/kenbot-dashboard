@@ -1,0 +1,6 @@
+{
+  "steps": [
+    {"action": "restart", "service": "kenbot-news-publisher"},
+    {"action": "restart", "service": "kenbot-runner"}
+  ]
+}
