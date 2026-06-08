@@ -22,28 +22,22 @@ class RenderClient:
                 print(f"✅ {len(services)} services trouvés sur Render")
                 return services
             else:
-                print(f"❌ Erreur API Render: {resp.status_code} - {resp.text[:300]}")
+                print(f"❌ Erreur API: {resp.status_code}")
                 return []
         except Exception as e:
-            print(f"❌ Erreur connexion Render: {e}")
+            print(f"❌ Erreur connexion: {e}")
             return []
 
     def get_name(self, item):
         if not isinstance(item, dict):
             return "N/A"
-        return (
-            item.get("name") or
-            item.get("service", {}).get("name") or
-            item.get("displayName") or
-            item.get("id") or "N/A"
-        )
+        return (item.get("name") or 
+                item.get("service", {}).get("name") or 
+                item.get("displayName") or "N/A")
 
     def get_status(self, item):
         if not isinstance(item, dict):
             return "unknown"
-        return (
-            item.get("status") or
-            item.get("state") or
-            item.get("service", {}).get("status") or
-            "unknown"
-        )
+        # Meilleure détection du statut
+        service = item.get("service") or item
+        return service.get("status") or service.get("state") or "unknown"
