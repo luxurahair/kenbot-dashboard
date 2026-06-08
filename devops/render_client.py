@@ -1,7 +1,6 @@
 # devops/render_client.py
 import requests
 import os
-import json
 
 class RenderClient:
     def __init__(self):
@@ -17,7 +16,7 @@ class RenderClient:
             resp = requests.get(f"{self.base_url}/services?limit=100", headers=self.headers, timeout=15)
             if resp.ok:
                 services = resp.json()
-                print(f"✅ {len(services)} services trouvés sur Render\n")
+                print(f"✅ {len(services)} services trouvés sur Render")
                 return services
             else:
                 print(f"❌ Erreur API: {resp.status_code}")
@@ -29,28 +28,15 @@ class RenderClient:
     def get_name(self, item):
         if not isinstance(item, dict):
             return "N/A"
-        
-        # Toutes les possibilités connues de Render API
-        possible = [
-            item.get("name"),
-            item.get("service", {}).get("name"),
-            item.get("displayName"),
-            item.get("hostname"),
-            item.get("id")
-        ]
-        for name in possible:
-            if name and str(name).strip():
-                return str(name)
-        return "N/A"
+        return (item.get("name") or 
+                item.get("service", {}).get("name") or 
+                item.get("displayName") or 
+                item.get("id") or "N/A")
 
-# Debug
-if __name__ == "__main__":
-    client = RenderClient()
-    services = client.list_services()
-    print("\n=== DEBUG - PREMIER SERVICE (RAW) ===")
-    if services:
-        print(json.dumps(services[0], indent=2)[:2000])
-    print("\n=== LISTE DES SERVICES ===")
-    for s in services:
-        name = client.get_name(s)
-        print(f"  • {name}")
+    def get_status(self, item):
+        if not isinstance(item, dict):
+            return "unknown"
+        return (item.get("status") or 
+                item.get("state") or 
+                item.get("service", {}).get("status") or 
+                "unknown")
