@@ -53,8 +53,8 @@ NOTIFY_MACOS = os.environ.get("KENBOT_NOTIFY_MACOS", "1") == "1"
 NTFY_TOPIC = os.environ.get("KENBOT_NTFY_TOPIC", "")  # ex: kenbot-daniel-xyz123 (secret obscur)
 NTFY_SERVER = os.environ.get("KENBOT_NTFY_SERVER", "https://ntfy.sh")
 AI_ENABLED = os.environ.get("KENBOT_AI_ENABLED", "1") == "1"
-AI_PROVIDER = os.environ.get("KENBOT_AI_PROVIDER", "openai")  # anthropic|openai|gemini
-AI_MODEL = os.environ.get("KENBOT_AI_MODEL", "gpt-5.4-mini")
+AI_PROVIDER = os.environ.get("KENBOT_AI_PROVIDER", "xai")  # xai|openai|emergent
+AI_MODEL = os.environ.get("KENBOT_AI_MODEL", "grok-4-fast-non-reasoning")
 EMERGENT_LLM_KEY = os.environ.get("EMERGENT_LLM_KEY", "")
 
 for d in (INBOX, PROCESSING, OUTBOX, TEMPLATES, LOG_DIR):
@@ -135,9 +135,111 @@ RÈGLES :
 
 
 def ai_translate(prompt):
-    """Appelle Claude via emergentintegrations pour transformer une phrase FR en command JSON."""
+    """Traduit une phrase FR en command JSON via le provider AI configuré.
+
+    Providers supportés :
+      - xai     : Grok via api.x.ai (clé: XAI_API_KEY)        ← recommandé Kenbot
+      - openai  : GPT via api.openai.com (clé: OPENAI_API_KEY ou EMERGENT_LLM_KEY)
+      - emergent: via librarie emergentintegrations (proxy Emergent)
+    """
+    if AI_PROVIDER == "xai":
+        return _ai_translate_xai(prompt)
+    if AI_PROVIDER == "openai":
+        return _ai_translate_openai(prompt)
+    if AI_PROVIDER == "emergent":
+        return _ai_translate_emergent(prompt)
+    return {"action": "error", "message": f"Provider AI inconnu: {AI_PROVIDER}"}
+
+
+def _extract_json(text):
+    """Extrait un objet JSON même si l'IA met du markdown/texte autour."""
+    if not text:
+        return None
+    # Retire ```json ... ``` ou ``` ... ```
+    text = re.sub(r"```(?:json)?\s*", "", text)
+    text = text.replace("```", "")
+    m = re.search(r"\{.*\}", text, re.DOTALL)
+    if not m:
+        return None
+    try:
+        return json.loads(m.group(0))
+    except Exception:
+        return None
+
+
+def _ai_translate_xai(prompt):
+    """Appel direct xai/grok via httpx (zéro dépendance lourde)."""
+    key = os.environ.get("XAI_API_KEY", "")
+    if not key:
+        return {"action": "error", "message": "XAI_API_KEY manquante dans l'environnement"}
+    try:
+        import urllib.request
+        body = json.dumps({
+            "model": AI_MODEL,
+            "messages": [
+                {"role": "system", "content": AI_SYSTEM_PROMPT},
+                {"role": "user", "content": prompt},
+            ],
+            "temperature": 0,
+        }).encode("utf-8")
+        req = urllib.request.Request(
+            "https://api.x.ai/v1/chat/completions",
+            data=body,
+            headers={
+                "Authorization": f"Bearer {key}",
+                "Content-Type": "application/json",
+            },
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+        text = data.get("choices", [{}])[0].get("message", {}).get("content", "")
+        parsed = _extract_json(text)
+        if not parsed:
+            return {"action": "error", "message": f"Pas de JSON dans la réponse Grok: {text[:200]}"}
+        return parsed
+    except Exception as e:
+        log.exception("xai translate failed")
+        return {"action": "error", "message": f"xai échec: {e}"}
+
+
+def _ai_translate_openai(prompt):
+    """Appel direct OpenAI Chat Completion via httpx."""
+    key = os.environ.get("OPENAI_API_KEY") or EMERGENT_LLM_KEY
+    if not key:
+        return {"action": "error", "message": "OPENAI_API_KEY manquante"}
+    try:
+        import urllib.request
+        body = json.dumps({
+            "model": AI_MODEL,
+            "messages": [
+                {"role": "system", "content": AI_SYSTEM_PROMPT},
+                {"role": "user", "content": prompt},
+            ],
+            "temperature": 0,
+        }).encode("utf-8")
+        req = urllib.request.Request(
+            "https://api.openai.com/v1/chat/completions",
+            data=body,
+            headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+        text = data.get("choices", [{}])[0].get("message", {}).get("content", "")
+        parsed = _extract_json(text)
+        if not parsed:
+            return {"action": "error", "message": f"Pas de JSON dans la réponse OpenAI: {text[:200]}"}
+        return parsed
+    except Exception as e:
+        log.exception("openai translate failed")
+        return {"action": "error", "message": f"openai échec: {e}"}
+
+
+def _ai_translate_emergent(prompt):
+    """Via emergentintegrations (proxy Emergent — Anthropic ne marche pas, openai/gemini OK)."""
     if not EMERGENT_LLM_KEY:
-        return {"action": "error", "message": "EMERGENT_LLM_KEY manquante dans l'environnement"}
+        return {"action": "error", "message": "EMERGENT_LLM_KEY manquante"}
     try:
         import asyncio
         from emergentintegrations.llm.chat import LlmChat, UserMessage
@@ -147,20 +249,19 @@ def ai_translate(prompt):
                 api_key=EMERGENT_LLM_KEY,
                 session_id=f"kenbot-daemon-{uuid.uuid4().hex[:8]}",
                 system_message=AI_SYSTEM_PROMPT,
-            ).with_model(AI_PROVIDER, AI_MODEL)
+            ).with_model("openai", AI_MODEL)
             return await chat.send_message(UserMessage(text=prompt))
 
         text = asyncio.run(_run())
-        # Extrait du JSON même si l'IA met du texte autour (robustesse)
-        m = re.search(r"\{.*\}", text, re.DOTALL)
-        if not m:
-            return {"action": "error", "message": f"Pas de JSON dans la réponse IA: {text[:200]}"}
-        return json.loads(m.group(0))
+        parsed = _extract_json(text)
+        if not parsed:
+            return {"action": "error", "message": f"Pas de JSON dans la réponse: {text[:200]}"}
+        return parsed
     except ImportError:
-        return {"action": "error", "message": "emergentintegrations non installé : pip install emergentintegrations --extra-index-url https://d33sy5i8bnduwe.cloudfront.net/simple/"}
+        return {"action": "error", "message": "emergentintegrations non installé"}
     except Exception as e:
-        log.exception("ai_translate failed")
-        return {"action": "error", "message": f"AI échec: {e}"}
+        log.exception("emergent translate failed")
+        return {"action": "error", "message": f"emergent échec: {e}"}
 
 
 # ─── Templates ────────────────────────────────────────────────

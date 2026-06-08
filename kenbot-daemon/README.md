@@ -18,8 +18,7 @@ Un mini-Emergent qui tourne sur **ton Mac**, avec :
 ### 1. Pré-requis (1 fois)
 
 ```bash
-# AI mode requiert emergentintegrations
-pip3 install emergentintegrations --extra-index-url https://d33sy5i8bnduwe.cloudfront.net/simple/
+# Aucune dépendance Python additionnelle requise (xai/grok utilise urllib stdlib)
 
 # Push iPhone : crée un topic ntfy obscur (ex: kenbot-daniel-xyz-7k2)
 # - Aucun compte requis
@@ -36,8 +35,11 @@ nano kenbot-daemon/com.dgauto.kenbot-daemon.plist
 
 À changer (3 lignes) :
 - `KENBOT_DAEMON_TOKEN` → token webhook (`openssl rand -hex 32`)
-- `EMERGENT_LLM_KEY`    → ta clé Emergent (récupérable dans le profil Emergent)
-- `KENBOT_NTFY_TOPIC`   → ton topic ntfy secret
+- `XAI_API_KEY`         → ta clé xai/grok (commence par `xai-`) — déjà dans tes services Luxura Render
+- `KENBOT_NTFY_TOPIC`   → ton topic ntfy secret (optionnel)
+
+> **AI providers supportés** : `xai` (Grok-4, défaut, $$$), `openai` (GPT, $$), `emergent` (proxy gratuit limité)
+> Modèle par défaut : **`grok-4-fast-non-reasoning`** (~10x moins cher que grok-4 et largement assez bon pour de la traduction FR→JSON)
 
 ### 3. Installe
 
