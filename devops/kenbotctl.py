@@ -1,148 +1,117 @@
 #!/usr/bin/env python3
 """
-Mini Emergent V3.1 — Version Consolidée & Puissante
-====================================================
-CLI unique pour gérer les services Render des 3 projets logiques
-(Kenbot / Luxura / CalcAuto).
-
-Toutes les commandes ci-dessous sont **réellement implémentées** :
-    kenbot | luxura | calcauto | all      → liste les services
-    restart    --service NOM              → redéploie un service
-    env-list   --service NOM              → liste les env vars
-    env-set    --service NOM --key K --value V  → set/update une env var
-    snapshot   [--project NAME]           → snapshot env vars (alerte vars critiques)
-    diagnostic [--project NAME]           → diagnostic complet
-    help                                  → affiche cette aide
+Mini Emergent V3.2 — Puissant & Stable
 """
-import argparse
-import os
-import sys
 
+import argparse
+import sys
+import os
 from dotenv import load_dotenv
 
-load_dotenv(".secrets.env")
+load_dotenv('.secrets.env')
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from contexts import ALL_PROJECTS, get_context  # noqa: E402
-from protect_render_envvars import RenderEnvProtector  # noqa: E402
-from render_client import RenderClient  # noqa: E402
-
+from render_client import RenderClient
+from contexts import ALL_PROJECTS, get_context
+from protect_render_envvars import RenderEnvProtector
 
 def main():
-    parser = argparse.ArgumentParser(description="Mini Emergent V3.1")
-    parser.add_argument(
-        "command",
-        choices=[
-            "kenbot",
-            "luxura",
-            "calcauto",
-            "all",
-            "restart",
-            "env-list",
-            "env-set",
-            "snapshot",
-            "diagnostic",
-            "help",
-        ],
-        nargs="?",
-        default="help",
-    )
+    parser = argparse.ArgumentParser(description="Mini Emergent V3.2")
+    parser.add_argument("command", choices=["kenbot", "luxura", "calcauto", "all", "restart", "env-list", "env-set", "snapshot", "diagnostic", "help"], nargs='?', default="help")
     parser.add_argument("--service", help="Nom du service (ex: kenbot-runner)")
-    parser.add_argument("--key", help="Clé de l'env var (utilisé avec env-set)")
-    parser.add_argument("--value", help="Valeur de l'env var (utilisé avec env-set)")
-    parser.add_argument(
-        "--project",
-        choices=list(ALL_PROJECTS.keys()) + ["all"],
-        default="all",
-    )
+    parser.add_argument("--key", help="Clé à modifier (avec env-set)")
+    parser.add_argument("--value", help="Nouvelle valeur (avec env-set)")
+    parser.add_argument("--project", choices=list(ALL_PROJECTS.keys()) + ["all"], default="all")
 
     args = parser.parse_args()
 
     if args.command == "help":
         print(__doc__)
+        print("\nCommandes :")
+        print("  kenbot | luxura | calcauto | all")
+        print("  restart --service NOM")
+        print("  env-list --service NOM")
+        print("  env-set --service NOM --key CLE --value VALEUR")
+        print("  snapshot [--project NOM]")
+        print("  diagnostic [--project NOM]")
         return
 
     client = RenderClient()
 
-    # ── Listes par projet ────────────────────────────────────
+    # List commands
     if args.command in ["kenbot", "luxura", "calcauto", "all"]:
         if args.command == "all":
             services = client.list_services()
             label = "ALL"
         else:
-            services = get_context(args.command).filtered_services()
+            ctx = get_context(args.command)
+            services = ctx.filtered_services()
             label = args.command.upper()
-
         print(f"\n🔄 Services Render → {label}\n")
         for s in services:
             print(f"  • {client.get_name(s)} → {client.get_status(s)}")
-        if not services:
-            print("  (aucun service trouvé)")
         return
 
-    # ── Restart ──────────────────────────────────────────────
+    # Restart
     if args.command == "restart":
         if not args.service:
-            print("❌ Utilisation : restart --service NOM")
+            print("❌ --service requis")
             sys.exit(1)
-        print(f"🔄 Redémarrage de {args.service}...")
         svc = client.find_service_by_name(args.service)
         if not svc:
             print(f"❌ Service '{args.service}' non trouvé")
             sys.exit(1)
+        print(f"🔄 Redémarrage {args.service}...")
         success = client.restart_service(svc.get("id"))
         sys.exit(0 if success else 1)
 
-    # ── Env list ─────────────────────────────────────────────
+    # Env-list
     if args.command == "env-list":
         if not args.service:
-            print("❌ Utilisation : env-list --service NOM")
+            print("❌ --service requis")
             sys.exit(1)
         svc = client.find_service_by_name(args.service)
         if not svc:
             print(f"❌ Service '{args.service}' non trouvé")
             sys.exit(1)
         envs = client.get_env_vars(svc.get("id"))
-        print(f"\n📋 {len(envs)} variable(s) pour {args.service} :\n")
-        for k in sorted(envs):
-            v = envs[k]
-            preview = (v[:60] + "…") if v and len(v) > 60 else v
-            print(f"  • {k} = {preview!r}")
+        print(f"\n📋 {len(envs)} variables pour {args.service}:\n")
+        for k, v in sorted(envs.items()):
+            preview = (v[:60] + "...") if len(v or "") > 60 else (v or "")
+            print(f"  • {k} = {preview}")
         return
 
-    # ── Env set ──────────────────────────────────────────────
+    # Env-set (nouveau)
     if args.command == "env-set":
         if not args.service or not args.key or args.value is None:
-            print("❌ Utilisation : env-set --service NOM --key CLE --value VALEUR")
+            print("❌ Usage : env-set --service NOM --key CLE --value VALEUR")
             sys.exit(1)
         svc = client.find_service_by_name(args.service)
         if not svc:
             print(f"❌ Service '{args.service}' non trouvé")
             sys.exit(1)
-        print(f"🔧 Modification de {args.key} sur {args.service}...")
-        ok = client.set_env_var(svc.get("id"), args.key, args.value)
-        if ok:
-            print("💾 N'oublie pas de redémarrer le service si nécessaire :")
+        print(f"🔧 Mise à jour {args.key} sur {args.service}...")
+        success = client.set_env_var(svc.get("id"), args.key, args.value)
+        if success:
+            print("💾 N'oublie pas de redémarrer :")
             print(f"   python3 devops/kenbotctl.py restart --service {args.service}")
-        sys.exit(0 if ok else 1)
+        sys.exit(0 if success else 1)
 
-    # ── Snapshot ─────────────────────────────────────────────
+    # Snapshot
     if args.command == "snapshot":
-        if args.project == "all":
+        target = args.project if args.project != "all" else None
+        if target:
+            RenderEnvProtector(target).snapshot()
+        else:
             for p in ALL_PROJECTS:
                 RenderEnvProtector(p).snapshot()
-        else:
-            RenderEnvProtector(args.project).snapshot()
         return
 
-    # ── Diagnostic ───────────────────────────────────────────
+    # Diagnostic
     if args.command == "diagnostic":
         from diagnostic import run
-
-        target = args.project if args.project != "all" else "kenbot"
-        run(target)
+        run(args.project if args.project != "all" else "kenbot")
         return
-
 
 if __name__ == "__main__":
     main()
