@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Mini Emergent v1.0 - kenbotctl (Filtrage amélioré)
+Mini Emergent v1.0 - kenbotctl (Filtrage précis)
 """
 
 import argparse
@@ -19,11 +19,11 @@ class Context:
         self.project = project
         self.render = RenderClient()
         
-        # Mots-clés pour filtrer
+        # Filtres très précis
         if project == "kenbot":
-            self.keywords = ["kenbot", "beauce", "calcauto", "facebook weekend", "facebook educational"]
+            self.keywords = ["kenbot", "beauce", "calcauto", "facebook weekend", "facebook educational", "facebook product"]
         else:
-            self.keywords = ["luxura"]
+            self.keywords = ["luxura", "luxura-"]
 
     def list_render_services(self):
         services = self.render.list_services()
@@ -31,18 +31,11 @@ class Context:
         
         filtered = []
         for s in services:
-            name = self.render.get_name(s)
-            name_lower = name.lower()
-            
-            # Filtre intelligent
-            if any(kw in name_lower for kw in self.keywords):
+            name = self.render.get_name(s).lower()
+            if any(kw in name for kw in self.keywords):
                 filtered.append(s)
         
-        if not filtered:
-            print(f"   Aucun service trouvé pour {self.project}")
-            return
-
-        print(f"   {len(filtered)} services trouvés :\n")
+        print(f"   {len(filtered)} services trouvés pour {self.project}:\n")
         for s in filtered:
             name = self.render.get_name(s)
             status = self.render.get_status(s)
