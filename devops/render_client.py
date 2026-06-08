@@ -101,3 +101,38 @@ class RenderClient:
         except Exception as e:
             print(f"   ❌ Erreur restart: {e}")
             return False
+
+    # ── Env Set ───────────────────────────────────────────────
+    def set_env_var(self, service_id, key, value):
+        """Met à jour ou crée une variable d'environnement sur Render."""
+        try:
+            current = self.get_env_vars(service_id)
+
+            # Render PUT remplace tout le set — il faut renvoyer toutes les vars
+            env_payload = []
+            updated = False
+            for k, v in current.items():
+                if k == key:
+                    env_payload.append({"key": key, "value": value})
+                    updated = True
+                else:
+                    env_payload.append({"key": k, "value": v})
+            if not updated:
+                env_payload.append({"key": key, "value": value})
+
+            resp = requests.put(
+                f"{self.base_url}/services/{service_id}/env-vars",
+                headers=self.headers,
+                json=env_payload,
+                timeout=15,
+            )
+            if resp.ok:
+                preview = (value[:50] + "…") if value and len(value) > 50 else value
+                action = "mise à jour" if updated else "créée"
+                print(f"   ✅ Variable {action} : {key} = {preview!r}")
+                return True
+            print(f"   ❌ HTTP {resp.status_code}: {resp.text[:200]}")
+            return False
+        except Exception as e:
+            print(f"   ❌ Exception set_env_var: {e}")
+            return False

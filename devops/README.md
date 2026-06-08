@@ -32,6 +32,9 @@ python devops/kenbotctl.py luxura      # Luxura uniquement
 python devops/kenbotctl.py calcauto    # CalcAuto uniquement
 python devops/kenbotctl.py all         # Tous (33 services)
 
+# === Set/Update une env var ===
+python devops/kenbotctl.py env-set --service kenbot-runner --key MY_KEY --value "ma valeur"
+
 # === Redémarrer un service ===
 python devops/kenbotctl.py restart --service kenbot-dashboard-api
 

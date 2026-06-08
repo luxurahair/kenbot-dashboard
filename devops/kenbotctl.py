@@ -9,6 +9,7 @@ Toutes les commandes ci-dessous sont **réellement implémentées** :
     kenbot | luxura | calcauto | all      → liste les services
     restart    --service NOM              → redéploie un service
     env-list   --service NOM              → liste les env vars
+    env-set    --service NOM --key K --value V  → set/update une env var
     snapshot   [--project NAME]           → snapshot env vars (alerte vars critiques)
     diagnostic [--project NAME]           → diagnostic complet
     help                                  → affiche cette aide
@@ -38,6 +39,7 @@ def main():
             "all",
             "restart",
             "env-list",
+            "env-set",
             "snapshot",
             "diagnostic",
             "help",
@@ -46,6 +48,8 @@ def main():
         default="help",
     )
     parser.add_argument("--service", help="Nom du service (ex: kenbot-runner)")
+    parser.add_argument("--key", help="Clé de l'env var (utilisé avec env-set)")
+    parser.add_argument("--value", help="Valeur de l'env var (utilisé avec env-set)")
     parser.add_argument(
         "--project",
         choices=list(ALL_PROJECTS.keys()) + ["all"],
@@ -105,6 +109,22 @@ def main():
             preview = (v[:60] + "…") if v and len(v) > 60 else v
             print(f"  • {k} = {preview!r}")
         return
+
+    # ── Env set ──────────────────────────────────────────────
+    if args.command == "env-set":
+        if not args.service or not args.key or args.value is None:
+            print("❌ Utilisation : env-set --service NOM --key CLE --value VALEUR")
+            sys.exit(1)
+        svc = client.find_service_by_name(args.service)
+        if not svc:
+            print(f"❌ Service '{args.service}' non trouvé")
+            sys.exit(1)
+        print(f"🔧 Modification de {args.key} sur {args.service}...")
+        ok = client.set_env_var(svc.get("id"), args.key, args.value)
+        if ok:
+            print("💾 N'oublie pas de redémarrer le service si nécessaire :")
+            print(f"   python3 devops/kenbotctl.py restart --service {args.service}")
+        sys.exit(0 if ok else 1)
 
     # ── Snapshot ─────────────────────────────────────────────
     if args.command == "snapshot":
