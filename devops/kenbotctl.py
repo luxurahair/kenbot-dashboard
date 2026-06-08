@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Mini Emergent v1.0 - Version simplifiée
+Mini Emergent v1.0 - kenbotctl (Version filtrée)
 """
 
 import argparse
@@ -14,24 +14,40 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from render_client import RenderClient
 
+class Context:
+    def __init__(self, project="kenbot"):
+        self.project = project
+        self.render = RenderClient()
+        self.prefix = "kenbot" if project == "kenbot" else "luxura"
+
+    def list_render_services(self):
+        services = self.render.list_services()
+        print(f"\n🔄 Services Render → {self.project.upper()} (filtre: {self.prefix}*)\n")
+        
+        filtered = [s for s in services if self.prefix.lower() in str(self.render.get_name(s)).lower()]
+        
+        if not filtered:
+            print(f"   Aucun service trouvé avec le préfixe '{self.prefix}'")
+            return
+
+        for s in filtered:
+            name = self.render.get_name(s)
+            status = self.render.get_status(s)
+            print(f"  • {name} → {status}")
+
 def main():
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(description="Mini Emergent CLI")
     parser.add_argument("command", choices=["render-list", "help"], nargs='?', default="help")
     parser.add_argument("--project", choices=["kenbot", "luxura"], default="kenbot")
+
     args = parser.parse_args()
 
     if args.command == "help":
-        print("Usage: python devops/kenbotctl.py render-list")
+        print("Usage: python devops/kenbotctl.py render-list --project kenbot")
         return
 
-    client = RenderClient()
-    services = client.list_services()
-
-    print(f"\n🔄 Services Render ({args.project}):")
-    for s in services:
-        name = s.get('name') or s.get('service', {}).get('name') or s.get('id') or "N/A"
-        status = s.get('status') or s.get('state') or "unknown"
-        print(f"  • {name} → {status}")
+    context = Context(args.project)
+    context.list_render_services()
 
 if __name__ == "__main__":
     main()
