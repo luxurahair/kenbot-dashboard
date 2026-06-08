@@ -1,6 +1,7 @@
 # devops/render_client.py
 import requests
 import os
+import json
 
 class RenderClient:
     def __init__(self):
@@ -14,37 +15,24 @@ class RenderClient:
     def list_services(self):
         try:
             resp = requests.get(f"{self.base_url}/services?limit=100", headers=self.headers, timeout=15)
+            print(f"Status code: {resp.status_code}")
             if resp.ok:
                 services = resp.json()
-                print(f"✅ {len(services)} services trouvés sur Render\n")
+                print(f"✅ {len(services)} services trouvés")
                 return services
             else:
-                print(f"❌ Erreur API: {resp.status_code}")
+                print(f"❌ Erreur: {resp.text[:500]}")
                 return []
         except Exception as e:
-            print(f"❌ Erreur connexion: {e}")
+            print(f"❌ Exception: {e}")
             return []
 
-    def get_name(self, item):
-        if not isinstance(item, dict):
-            return "N/A"
-        # Essayer tous les chemins possibles
-        return (item.get("name") or 
-                item.get("service", {}).get("name") or 
-                item.get("displayName") or 
-                item.get("id") or "N/A")
-
-    def get_status(self, item):
-        if not isinstance(item, dict):
-            return "unknown"
-        return item.get("status") or item.get("state") or "unknown"
-
-
-# Test direct
+# Debug complet
 if __name__ == "__main__":
     client = RenderClient()
     services = client.list_services()
-    for s in services:
-        name = client.get_name(s)
-        status = client.get_status(s)
-        print(f"  • {name} → {status}")
+    if services:
+        print("\n=== DEBUG STRUCTURE DU PREMIER SERVICE (RAW) ===")
+        print(json.dumps(services[0], indent=2))
+        print("\n=== NOMS DES CLÉS DISPONIBLES ===")
+        print(list(services[0].keys()))
