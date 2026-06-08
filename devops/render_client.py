@@ -23,7 +23,7 @@ class RenderClient:
                 print(f"✅ {len(services)} services trouvés sur Render")
                 return services
             else:
-                print(f"❌ Erreur API: {resp.status_code}")
+                print(f"❌ Erreur API: {resp.status_code} - {resp.text[:200]}")
                 return []
         except Exception as e:
             print(f"❌ Erreur connexion: {e}")
@@ -40,9 +40,22 @@ class RenderClient:
         if not isinstance(item, dict):
             return "unknown"
         
-        # Essayer tous les chemins possibles
-        for path in [item, item.get("service", {}), item.get("latestDeploy", {})]:
-            status = path.get("status") or path.get("state") or path.get("status")
-            if status:
-                return status
+        # Debug : on cherche dans tous les endroits possibles
+        candidates = [item, item.get("service", {}), item.get("latestDeploy", {})]
+        for data in candidates:
+            for key in ["status", "state", "currentStatus"]:
+                if key in data and data[key]:
+                    return data[key]
         return "unknown"
+
+    def debug_first_service(self):
+        services = self.list_services()
+        if services:
+            print("\n=== DEBUG STRUCTURE PREMIER SERVICE ===")
+            print(json.dumps(services[0], indent=2)[:1500])
+            print("=== CLÉS PRINCIPALES ===")
+            print(list(services[0].keys()))
+
+if __name__ == "__main__":
+    client = RenderClient()
+    client.debug_first_service()
