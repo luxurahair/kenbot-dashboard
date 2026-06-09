@@ -692,6 +692,9 @@ class WebhookHandler(BaseHTTPRequestHandler):
             self._send_json(400, {"ok": False, "error": f"bad json: {e}"})
             return
         result = execute_command(payload)
+        # 2026-06-09: déclenche aussi les notifs sur erreur via webhook HTTP (pas seulement queue)
+        if not result.get("ok"):
+            notify_mac("Kenbot Daemon ❌", str(result.get("error") or "failed")[:120])
         self._send_json(200 if result.get("ok") else 500, result)
 
 
