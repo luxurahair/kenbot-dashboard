@@ -402,6 +402,44 @@ def execute_command(cmd):
             proc = subprocess.run(shell_cmd, shell=True, capture_output=True, text=True, timeout=120, cwd=str(REPO_DIR))
             return {"ok": proc.returncode == 0, "rc": proc.returncode, "stdout": proc.stdout[-2000:], "stderr": proc.stderr[-500:]}
 
+        # ── V3.1 cloud agent : write_file ──
+        if action == "write_file":
+            path = cmd.get("path")
+            content = cmd.get("content", "")
+            if not path:
+                return {"ok": False, "error": "path requis"}
+            # Sécurité : limite aux dossiers Kenbot uniquement
+            ALLOWED_ROOTS = [str(REPO_DIR), str(DAEMON_DIR)]
+            real = os.path.realpath(path)
+            if not any(real.startswith(r) for r in ALLOWED_ROOTS):
+                return {"ok": False, "error": f"path hors zones autorisées ({ALLOWED_ROOTS})"}
+            try:
+                os.makedirs(os.path.dirname(real), exist_ok=True)
+                if cmd.get("append"):
+                    with open(real, "a", encoding="utf-8") as f:
+                        f.write(content)
+                else:
+                    with open(real, "w", encoding="utf-8") as f:
+                        f.write(content)
+                return {"ok": True, "path": real, "bytes": len(content)}
+            except Exception as e:
+                return {"ok": False, "error": str(e)}
+
+        if action == "read_file":
+            path = cmd.get("path")
+            if not path:
+                return {"ok": False, "error": "path requis"}
+            ALLOWED_ROOTS = [str(REPO_DIR), str(DAEMON_DIR)]
+            real = os.path.realpath(path)
+            if not any(real.startswith(r) for r in ALLOWED_ROOTS):
+                return {"ok": False, "error": "path hors zones autorisées"}
+            try:
+                with open(real, "r", encoding="utf-8") as f:
+                    content = f.read()
+                return {"ok": True, "path": real, "content": content[-50000:], "bytes": len(content)}
+            except Exception as e:
+                return {"ok": False, "error": str(e)}
+
         return {"ok": False, "error": f"action inconnue: {action}"}
 
     except subprocess.TimeoutExpired:
@@ -741,6 +779,14 @@ def main():
         threads.append(threading.Thread(target=watchdog_loop, args=(stop_event,), daemon=True, name="watchdog"))
     if HTTP_ENABLED:
         threads.append(threading.Thread(target=http_loop, args=(stop_event,), daemon=True, name="http"))
+    # V3.1 supabase poll (cloud agent → mon Mac)
+    try:
+        import sys as _sys
+        _sys.path.insert(0, str(DAEMON_DIR))
+        from supabase_queue import poll_loop as _supa_poll
+        threads.append(threading.Thread(target=_supa_poll, args=(stop_event, execute_command), daemon=True, name="supabase"))
+    except Exception as _e:
+        log.warning(f"supabase_queue import skipped: {_e}")
 
     for t in threads:
         t.start()
