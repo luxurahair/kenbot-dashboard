@@ -134,6 +134,17 @@ RÈGLES :
 """
 
 
+def _ai_key_available():
+    """Vrai si la clé du provider AI actuel est dispo."""
+    if AI_PROVIDER == "xai":
+        return bool(os.environ.get("XAI_API_KEY"))
+    if AI_PROVIDER == "openai":
+        return bool(os.environ.get("OPENAI_API_KEY") or EMERGENT_LLM_KEY)
+    if AI_PROVIDER == "emergent":
+        return bool(EMERGENT_LLM_KEY)
+    return False
+
+
 def ai_translate(prompt):
     """Traduit une phrase FR en command JSON via le provider AI configuré.
 
@@ -639,7 +650,7 @@ class WebhookHandler(BaseHTTPRequestHandler):
                 "inbox_pending": len(list(INBOX.glob("*.json"))),
                 "outbox_results": len(list(OUTBOX.glob("*.json"))),
                 "watchdog_enabled": WATCHDOG_ENABLED,
-                "ai_enabled": AI_ENABLED and bool(EMERGENT_LLM_KEY),
+                "ai_enabled": AI_ENABLED and _ai_key_available(),
                 "templates": sorted(p.stem for p in TEMPLATES.glob("*.json")),
             })
             return
@@ -694,7 +705,7 @@ def main():
     log.info("🚀 Kenbot Daemon V3 démarré")
     log.info(f"   DAEMON_DIR={DAEMON_DIR}")
     log.info(f"   REPO_DIR={REPO_DIR}")
-    log.info(f"   AI={'ON' if (AI_ENABLED and EMERGENT_LLM_KEY) else 'OFF'} ({AI_PROVIDER}/{AI_MODEL})")
+    log.info(f"   AI={'ON' if (AI_ENABLED and _ai_key_available()) else 'OFF'} ({AI_PROVIDER}/{AI_MODEL})")
     log.info(f"   NTFY topic={'set' if NTFY_TOPIC else '(empty)'}")
     write_heartbeat()
     notify_mac("Kenbot Daemon", "🚀 V3 démarré")
