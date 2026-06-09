@@ -50,8 +50,13 @@ ALLOW_SHELL = os.environ.get("KENBOT_ALLOW_SHELL", "0") == "1"
 NOTIFY_MACOS = os.environ.get("KENBOT_NOTIFY_MACOS", "1") == "1"
 
 # V3 ajouts
-NTFY_TOPIC = os.environ.get("KENBOT_NTFY_TOPIC", "")  # ex: kenbot-daniel-xyz123 (secret obscur)
+NTFY_TOPIC = os.environ.get("KENBOT_NTFY_TOPIC", "")
 NTFY_SERVER = os.environ.get("KENBOT_NTFY_SERVER", "https://ntfy.sh")
+SMS_ENABLED = os.environ.get("KENBOT_SMS_ENABLED", "0") == "1"
+SMS_PHONE = os.environ.get("KENBOT_SMS_PHONE", "")  # ex: +14182223939
+TWILIO_SID = os.environ.get("TWILIO_ACCOUNT_SID", "")
+TWILIO_TOK = os.environ.get("TWILIO_AUTH_TOKEN", "")
+TWILIO_FROM = os.environ.get("TWILIO_FROM_NUMBER", "")
 AI_ENABLED = os.environ.get("KENBOT_AI_ENABLED", "1") == "1"
 AI_PROVIDER = os.environ.get("KENBOT_AI_PROVIDER", "xai")  # xai|openai|emergent
 AI_MODEL = os.environ.get("KENBOT_AI_MODEL", "grok-4-fast-non-reasoning")
@@ -79,6 +84,23 @@ def notify_mac(title, message):
         except Exception:
             pass
     notify_ntfy(title, message)
+    notify_sms(title, message)
+
+
+def notify_sms(title, message):
+    """Envoi SMS Twilio pour alertes critiques uniquement (économise les $$)."""
+    if not (SMS_ENABLED and SMS_PHONE and TWILIO_SID and TWILIO_TOK and TWILIO_FROM):
+        return
+    try:
+        from twilio.rest import Client
+        tw = Client(TWILIO_SID, TWILIO_TOK)
+        body = f"{title}\n{message}"[:300]
+        tw.messages.create(from_=TWILIO_FROM, to=SMS_PHONE, body=body)
+        log.info(f"📲 SMS Twilio envoyé à …{SMS_PHONE[-4:]}")
+    except ImportError:
+        log.warning("twilio non installé : pip3 install twilio --user")
+    except Exception as e:
+        log.warning(f"SMS Twilio échec: {e}")
 
 
 def notify_ntfy(title, message, priority="default", tags=None):
@@ -707,6 +729,7 @@ def main():
     log.info(f"   REPO_DIR={REPO_DIR}")
     log.info(f"   AI={'ON' if (AI_ENABLED and _ai_key_available()) else 'OFF'} ({AI_PROVIDER}/{AI_MODEL})")
     log.info(f"   NTFY topic={'set' if NTFY_TOPIC else '(empty)'}")
+    log.info(f"   SMS Twilio={'ON' if (SMS_ENABLED and SMS_PHONE) else 'OFF'} (→ …{SMS_PHONE[-4:] if SMS_PHONE else ''})")
     write_heartbeat()
     notify_mac("Kenbot Daemon", "🚀 V3 démarré")
 
