@@ -46,7 +46,13 @@ def _supa_request(method, path, **kwargs):
     body = json.dumps(data).encode("utf-8") if data else None
     req = urllib.request.Request(f"{SUPABASE_URL}/rest/v1{path}", data=body, headers=headers, method=method)
     with urllib.request.urlopen(req, timeout=15) as resp:
-        return json.loads(resp.read().decode("utf-8")) if resp.length else None
+        raw = resp.read()
+        if not raw:
+            return None
+        try:
+            return json.loads(raw.decode("utf-8"))
+        except json.JSONDecodeError:
+            return None
 
 
 def poll_loop(stop_event, execute_fn):
