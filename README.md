@@ -32,6 +32,77 @@ kenbot-runner/                          # Bot principal (Render Cron)
 kenbot-dashboard/                       # Dashboard Web (Vercel + Render)
 ├── api/server.py                       # FastAPI backend
 └── frontend/src/App.js                 # React frontend
+
+kenbot-daemon/                          # 🆕 Daemon Mac V3 (LaunchAgent local)
+├── kenbot_daemon.py                    # Process principal — HTTP /cmd + queue + watchdog
+├── supabase_queue.py                   # 🛰️  Pont cloud → Mac via Supabase agent_queue
+├── com.dgauto.kenbot-daemon.plist      # Config launchctl
+└── logs/daemon.log                     # Logs runtime
+
+tools/                                  # Outils DevOps
+├── fb_token_refresh.py                 # 🔒 Refresh Page Token (SAFEGUARD type=PAGE)
+└── push_cmd_to_mac.py                  # Push commande dans agent_queue Supabase
+```
+
+## 🤖 Agents & Daemons (Vue d'ensemble)
+
+Le système comporte **plusieurs daemons** qui collaborent pour donner un contrôle total sur l'iMac et les services cloud :
+
+| Daemon / Service | Fichier source | Repo | Rôle |
+|---|---|---|---|
+| **V1 — Mac Remote** | `~/kenebec-ai/beauce-publisher/agent/mac_remote_daemon.py` | `kenebec-ai` | Reçoit commandes whitelistées depuis l'onglet **MAC REMOTE** du dashboard (ping, git_pull, restart, kill_chrome…) — UI en boutons |
+| **V3 — Kenbot Daemon** | `~/kenbot-dashboard/kenbot-daemon/kenbot_daemon.py` | `kenbot-dashboard` | Polling Supabase `agent_queue` + HTTP webhook `localhost:7777` + traduction Grok (xAI) |
+| **Beauce Publisher** (Agent #1) | `~/kenebec-ai/beauce-publisher/agent/dgauto_publish_one.py` | `kenebec-ai` | Publie auto sur groupes Facebook Beauce |
+| **Maintainer** (Agent #2) | `~/kenebec-ai/beauce-publisher/agent/maintainer.py` | `kenebec-ai` | Garde session Facebook chaude |
+
+### 🛰️ Canal Supabase Queue (cloud → Mac)
+
+Bridge sécurisé entre les agents cloud et le Mac local, via la table Supabase `agent_queue` :
+
+```
+☁️  Cloud agent (Render/CI/AI)
+    │
+    │ POST {action, payload, signature(HMAC-SHA256)}
+    ▼
+🗄️  Supabase agent_queue (status=pending, target=mac_daemon)
+    │
+    │ Daemon V3 polle toutes les 10s
+    ▼
+🖥️  Mac V3 daemon
+    │ - Vérifie signature HMAC
+    │ - Exécute action (read_file, write_file, ai, restart, etc.)
+    │ - Écrit result dans la table
+    ▼
+☁️  Cloud relit le résultat
+```
+
+**Sécurité** : chaque commande est signée HMAC-SHA256 avec `KENBOT_AGENT_HMAC_SECRET`. La signature est vérifiée avant exécution. Le shell brut (`action: shell`) est désactivé par défaut (`KENBOT_ALLOW_SHELL=1` pour activer).
+
+**Actions disponibles** :
+- `read_file` / `write_file` — limité à `REPO_DIR` et `DAEMON_DIR`
+- `ai` — prompt en langage naturel → Grok traduit → exécution
+- `restart` / `env-set` / `env-list` / `snapshot` — wrappe `devops/kenbotctl.py`
+- `template` — workflow JSON multi-étapes
+- `kenbotctl` — wrappe le CLI complet
+
+### 🐛 Bug fix critique 2026-06-10
+
+**Bug** : `supabase_queue.py` utilisait `if resp.length` pour vérifier la réponse HTTP. Mais Supabase répond avec `Transfer-Encoding: chunked` → `resp.length = None` → la fonction `_supa_request` retournait silencieusement `None`. Le daemon polling tournait mais ne voyait **jamais** les commandes pending.
+
+**Fix** ([commit `c9dff2da`](https://github.com/luxurahair/kenbot-dashboard/commit/c9dff2da)) : lire le body d'abord, puis vérifier qu'il n'est pas vide.
+
+### 🎙️ Voice Grok iPhone (en construction)
+
+Permet de parler à Siri depuis n'importe où dans le monde pour piloter le Mac et les services Render :
+
+```
+🎙️ "Dis Siri, Kenbot, redémarre l'API"
+      ↓ Apple Shortcut
+☁️ POST kenbot-dashboard-api.onrender.com/api/grok/voice
+      ↓ pousse dans agent_queue (action=ai)
+🖥️ Daemon V3 → Grok traduit → exécute → écrit result
+      ↓
+🔊 Siri lit la réponse à voix haute
 ```
 
 ## Pipeline Cron (toutes les 60 min)
@@ -136,3 +207,17 @@ python tests/test_sold_unsold_logic.py          # 11 tests
 - **Hashtags SEO**: Dynamiques par véhicule (#DodgeHornet2024 #Beauce etc.)
 - **PRICE_CHANGED**: Affiche le montant du rabais (📉 RÉDUCTION DE PRIX — 2 000 $ DE RABAIS!)
 - **Photos en commentaires**: Supprimé (causait 403 FB). Max 10 photos par post.
+
+## Corrections Récentes (v4.2.0 — 2026-06-10)
+
+### 🤖 Daemon V3 + Canal Supabase
+- **NEW**: Daemon Mac V3 (`kenbot-daemon/kenbot_daemon.py`) — process LaunchAgent local avec HTTP `/cmd`, queue Supabase et watchdog auto-recovery
+- **NEW**: Bridge cloud→Mac via table Supabase `agent_queue` (signature HMAC-SHA256)
+- **FIX critique**: `supabase_queue.py` ne récupérait jamais les commandes à cause d'un bug `resp.length is None` sur les réponses HTTP `Transfer-Encoding: chunked` Supabase
+- **NEW**: Traduction langage naturel via xAI Grok intégrée au daemon (`AI_SYSTEM_PROMPT`)
+
+### 🔒 Sécurité Token Facebook (Page Token permanent)
+- **FIX critique**: 13 services Render Luxura propageaient un USER token (invalidable au changement de mot de passe FB) au lieu d'un PAGE token permanent. Échange via `/me/accounts` → tous les services maintenant sur Page Token (`type=PAGE`, `expires_at=0`)
+- **FIX**: `kenbot-news-publisher` et `kenbot-runner` pointaient vers la mauvaise page (`FB_PAGE_ID=Luxura`). Corrigés vers KDC Auto Kennebec (`820789524460241`)
+- **NEW**: `tools/fb_token_refresh.py` v2 avec SAFEGUARD `verify_page_token()` qui refuse de propager si `type != PAGE`, support multi-projet (`--project luxura|kenbot`), Graph API v23.0
+
