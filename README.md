@@ -221,3 +221,45 @@ python tests/test_sold_unsold_logic.py          # 11 tests
 - **FIX**: `kenbot-news-publisher` et `kenbot-runner` pointaient vers la mauvaise page (`FB_PAGE_ID=Luxura`). Corrigés vers KDC Auto Kennebec (`820789524460241`)
 - **NEW**: `tools/fb_token_refresh.py` v2 avec SAFEGUARD `verify_page_token()` qui refuse de propager si `type != PAGE`, support multi-projet (`--project luxura|kenbot`), Graph API v23.0
 
+## 🎙️ Voice Grok iPhone (v4.3.0 — 2026-06-11)
+
+### Pipeline cloud → Mac entièrement opérationnel via Siri
+
+**Architecture** :
+```
+🎙️ "Dis Siri, Kenbot, redémarre le runner"
+   │ (dictée Apple Shortcut)
+   ▼
+☁️ POST kenbot-dashboard-api.onrender.com/api/grok/voice
+   │ (header X-Voice-Token + body JSON {prompt})
+   ▼
+🛰️ Supabase agent_queue (signature HMAC-SHA256)
+   │
+   ▼
+🖥️ Daemon V3 Mac (poll 10s) → xAI Grok traduit → execute_command
+   │
+   ▼
+☁️ Result stocké dans agent_queue → API renvoie {speech: "Service redémarré."}
+   ▼
+🔊 Siri lit la réponse à voix haute
+```
+
+**Composants nouveaux** :
+- `kenbot-dashboard/api/routers/grok_voice.py` — endpoint FastAPI `/api/grok/voice` côté Render
+- `tools/grok_voice_shortcut_guide.md` — guide step-by-step Apple Shortcut iPhone
+- `GROK_VOICE_TOKEN` env var sur kenbot-dashboard-api (Render)
+- Prompt système Grok amélioré : reconnaît GitHub/Render/Vercel/Supabase comme proper nouns + anglicismes québécois + mapping intelligent status→snapshot
+
+**Phrases qui marchent** (à dire à Siri) :
+- *"Redémarre kenbot-runner"* → `restart`
+- *"Combien j'ai de variables sur kenbot-dashboard-api"* → `env-list`
+- *"Vérifie l'état de Render"* → `snapshot all`
+- *"Diagnostic kenbot"* → `kenbotctl diagnostic --project kenbot`
+- *"Lis-moi le README"* → `read_file path=README.md`
+
+### 🛡️ Crisis Recovery (env vars Render écrasées)
+- **INCIDENT 2026-06-11** : un PUT bulk a accidentellement écrasé les 23 env vars de `kenbot-dashboard-api`
+- **MITIGATION** : 2 deploys annulés en urgence + restauration via snapshot `memory/render_envvars_snapshot.json` en moins de 60 secondes
+- **LESSON** : ne JAMAIS faire `PUT /env-vars` (bulk) sans backup — préférer `PUT /env-vars/{KEY}` ciblé
+
+
