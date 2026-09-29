@@ -1,3 +1,21 @@
+# ⚠️ Dépôt legacy — développement déplacé vers `luxurahair/kenebec-ai`
+
+> **NE PLUS DÉVELOPPER ICI.** Ce dépôt séparé est conservé uniquement pour l'historique.
+>
+> La source officielle et active du produit est maintenant : **`https://github.com/luxurahair/kenebec-ai`**.
+>
+> Le Dashboard actif se trouve dans : **`kenebec-ai/kenbot-dashboard/`**.
+>
+> Les déploiements Render/Vercel, Market Analyse, l'application mobile iOS/Android et les agents Mac sont maintenus depuis `kenebec-ai`.
+
+## Règle
+
+- Ne pas créer de nouvelle feature, correction ou déploiement depuis ce dépôt.
+- Pour tout travail actif, utiliser `luxurahair/kenebec-ai` → branche → PR → CI → merge.
+- Ce dépôt reste disponible seulement pour retrouver l'historique antérieur à la consolidation du monorepo.
+
+---
+
 # KENBOT — Bot Facebook Automatisé pour Kennebec Dodge Chrysler
 
 Bot intelligent qui scrape l'inventaire de véhicules, génère des annonces Facebook avec IA (GPT-4o), et gère automatiquement le cycle de vie des publications.
